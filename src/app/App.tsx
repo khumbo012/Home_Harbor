@@ -97,6 +97,29 @@ interface AppData {
   docs: DocItem[];
 }
 
+interface AppProfile {
+  name: string;
+  email: string;
+  portfolioName: string;
+}
+
+interface OnboardingSetup {
+  profile: AppProfile;
+  mode: "sample" | "fresh";
+  property?: {
+    name: string;
+    address: string;
+    city: string;
+    units: number;
+  };
+}
+
+const DEFAULT_PROFILE: AppProfile = {
+  name: "David Martinez",
+  email: "david.martinez@email.com",
+  portfolioName: "Rental portfolio",
+};
+
 const DEFAULT_IMAGES = [
   "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900&h=520&fit=crop&auto=format",
   "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=900&h=520&fit=crop&auto=format",
@@ -163,6 +186,24 @@ function useStoredData() {
   }
 
   return [data, setData] as const;
+}
+
+function useStoredProfile() {
+  const [profile, setProfileState] = useState<AppProfile>(() => {
+    try {
+      const stored = localStorage.getItem("keystone-user-profile");
+      return stored ? { ...DEFAULT_PROFILE, ...JSON.parse(stored) } : DEFAULT_PROFILE;
+    } catch {
+      return DEFAULT_PROFILE;
+    }
+  });
+
+  function setProfile(next: AppProfile) {
+    localStorage.setItem("keystone-user-profile", JSON.stringify(next));
+    setProfileState(next);
+  }
+
+  return [profile, setProfile] as const;
 }
 
 function uid(prefix: string) {
@@ -263,6 +304,11 @@ function EmptyState({ icon: Icon, title, subtitle }: { icon: React.ElementType; 
   );
 }
 
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return (parts[0]?.[0] || "U") + (parts[1]?.[0] || "");
+}
+
 const NAV_ITEMS = [
   { id: "dashboard" as Tab, label: "Today", Icon: Home },
   { id: "properties" as Tab, label: "Properties", Icon: Building2 },
@@ -293,7 +339,7 @@ function BottomNav({ active, onChange, badge }: { active: Tab; onChange: (tab: T
   );
 }
 
-function Sidebar({ active, onChange, badge }: { active: Tab; onChange: (tab: Tab) => void; badge: number }) {
+function Sidebar({ active, onChange, badge, profile }: { active: Tab; onChange: (tab: Tab) => void; badge: number; profile: AppProfile }) {
   return (
     <aside className="hidden h-full w-[232px] flex-shrink-0 flex-col bg-[#1A3352] lg:flex">
       <div className="flex items-center gap-2.5 border-b border-white/10 px-5 py-[18px]">
@@ -314,10 +360,10 @@ function Sidebar({ active, onChange, badge }: { active: Tab; onChange: (tab: Tab
       </nav>
       <div className="border-t border-white/10 p-3">
         <div className="flex items-center gap-2.5 rounded-xl px-2 py-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-[11px] font-black text-white">DM</div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-[11px] font-black uppercase text-white">{initials(profile.name)}</div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-bold leading-tight text-white">David Martinez</p>
-            <p className="truncate text-[11px] leading-tight text-white/45">Rental portfolio</p>
+            <p className="truncate text-[12px] font-bold leading-tight text-white">{profile.name}</p>
+            <p className="truncate text-[11px] leading-tight text-white/45">{profile.portfolioName}</p>
           </div>
         </div>
       </div>
@@ -325,7 +371,7 @@ function Sidebar({ active, onChange, badge }: { active: Tab; onChange: (tab: Tab
   );
 }
 
-function Dashboard({ data, onNav }: { data: AppData; onNav: (tab: Tab) => void }) {
+function Dashboard({ data, profile, onNav }: { data: AppData; profile: AppProfile; onNav: (tab: Tab) => void }) {
   const totals = useMemo(() => {
     const units = data.properties.reduce((sum, p) => sum + p.units, 0);
     const revenue = data.tenants.reduce((sum, t) => sum + Number(t.rent || 0), 0);
@@ -342,7 +388,7 @@ function Dashboard({ data, onNav }: { data: AppData; onNav: (tab: Tab) => void }
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Friday, May 29, 2026</p>
-            <h1 className="mt-1 text-2xl font-black leading-tight tracking-[-0.03em] text-foreground">Good morning,<br />David.</h1>
+            <h1 className="mt-1 text-2xl font-black leading-tight tracking-[-0.03em] text-foreground">Good morning,<br />{profile.name.split(" ")[0] || "there"}.</h1>
           </div>
           <button className="relative mt-1 flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted" aria-label="Notifications">
             <Bell className="h-5 w-5 text-foreground/60" />
@@ -636,7 +682,7 @@ function Documents({ data, onAdd }: { data: AppData; onAdd: () => void }) {
   );
 }
 
-function SettingsScreen({ data, resetData, exportData }: { data: AppData; resetData: () => void; exportData: () => void }) {
+function SettingsScreen({ data, profile, resetData, exportData, replayOnboarding }: { data: AppData; profile: AppProfile; resetData: () => void; exportData: () => void; replayOnboarding: () => void }) {
   const monthly = data.tenants.reduce((sum, tenant) => sum + Number(tenant.rent || 0), 0);
   const items = [
     { section: "Portfolio", rows: [{ Icon: Building2, label: "Properties", value: `${data.properties.length} active` }, { Icon: Users, label: "Tenants", value: `${data.tenants.length} active` }, { Icon: DollarSign, label: "Rent roll", value: `${money(monthly)}/mo` }] },
@@ -649,8 +695,8 @@ function SettingsScreen({ data, resetData, exportData }: { data: AppData; resetD
       <PageHeader title="Settings" />
       <div className="px-4 pt-4">
         <div className="mb-6 flex items-center gap-4 rounded-2xl border border-border bg-card p-5">
-          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-[#1A3352] text-lg font-black text-white">DM</div>
-          <div className="min-w-0 flex-1"><p className="font-black tracking-[-0.02em] text-foreground">David Martinez</p><p className="text-sm text-muted-foreground">david.martinez@email.com</p><p className="mt-1 text-xs text-muted-foreground">{data.properties.length} properties - {data.tenants.length} tenants</p></div>
+          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-[#1A3352] text-lg font-black uppercase text-white">{initials(profile.name)}</div>
+          <div className="min-w-0 flex-1"><p className="font-black tracking-[-0.02em] text-foreground">{profile.name}</p><p className="text-sm text-muted-foreground">{profile.email}</p><p className="mt-1 text-xs text-muted-foreground">{data.properties.length} properties - {data.tenants.length} tenants</p></div>
         </div>
         {items.map((section) => (
           <div key={section.section} className="mb-5">
@@ -671,6 +717,10 @@ function SettingsScreen({ data, resetData, exportData }: { data: AppData; resetD
           <button onClick={exportData} className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-[#1A3352]"><Download className="h-4 w-4" />Export</button>
           <button onClick={resetData} className="flex items-center justify-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-black text-red-700"><RefreshCcw className="h-4 w-4" />Reset demo</button>
         </div>
+        <button onClick={replayOnboarding} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-muted-foreground">
+          <User className="h-4 w-4" />
+          Replay onboarding
+        </button>
         <div className="pb-4 pt-6 text-center"><p className="text-xs font-bold text-muted-foreground">Keystone - v1.1.0</p><p className="mt-0.5 text-xs text-muted-foreground">Your rentals, organized.</p></div>
       </div>
     </div>
@@ -767,8 +817,167 @@ function AppModal({ kind, data, selectedProperty, onClose, onSave }: { kind: Mod
   );
 }
 
+function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) => void }) {
+  const [step, setStep] = useState(0);
+  const [mode, setMode] = useState<"sample" | "fresh">("sample");
+  const [profile, setProfile] = useState<AppProfile>({
+    name: "",
+    email: "",
+    portfolioName: "My rental portfolio",
+  });
+  const [property, setProperty] = useState({
+    name: "",
+    address: "",
+    city: "",
+    units: 1,
+  });
+
+  const steps = ["Welcome", "Profile", "Portfolio"];
+  const canContinue = step === 0 || (step === 1 ? profile.name.trim().length > 1 && profile.email.trim().length > 3 : mode === "sample" || property.name.trim().length > 1);
+
+  function finish() {
+    onComplete({
+      profile: {
+        name: profile.name.trim() || DEFAULT_PROFILE.name,
+        email: profile.email.trim() || DEFAULT_PROFILE.email,
+        portfolioName: profile.portfolioName.trim() || "My rental portfolio",
+      },
+      mode,
+      property: mode === "fresh" ? {
+        name: property.name.trim(),
+        address: property.address.trim(),
+        city: property.city.trim(),
+        units: Math.max(Number(property.units || 1), 1),
+      } : undefined,
+    });
+  }
+
+  return (
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[0.92fr_1.08fr]">
+      <section className="relative hidden overflow-hidden bg-[#1A3352] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+        <div>
+          <div className="mb-10 flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Home className="h-5 w-5" /></div>
+            <span className="text-lg font-black tracking-[-0.03em]">Keystone</span>
+          </div>
+          <h1 className="max-w-md text-4xl font-black leading-tight tracking-[-0.05em]">Bring your rentals into focus before the day starts.</h1>
+          <p className="mt-4 max-w-sm text-sm leading-6 text-white/68">Set up the essentials once, then manage properties, tenants, tasks, maintenance, and documents from one calm workspace.</p>
+        </div>
+        <div className="grid gap-3">
+          {[
+            { label: "Lease renewals", value: "60-day alerts" },
+            { label: "Maintenance", value: "Priority tracking" },
+            { label: "Documents", value: "Property organized" },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+              <span className="text-sm font-bold text-white/78">{item.label}</span>
+              <span className="text-sm font-black">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <main className="flex min-h-screen items-center justify-center px-4 py-8">
+        <div className="w-full max-w-[520px]">
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-2 lg:hidden">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1A3352] text-white"><Home className="h-4 w-4" /></div>
+              <span className="font-black tracking-[-0.03em] text-foreground">Keystone</span>
+            </div>
+            <div className="ml-auto flex gap-1.5">
+              {steps.map((label, index) => (
+                <span key={label} className={`h-1.5 rounded-full transition-all ${index === step ? "w-7 bg-[#1A3352]" : index < step ? "w-4 bg-[#0D9488]" : "w-4 bg-muted"}`} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+            {step === 0 && (
+              <div>
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EAF8F6]"><Building2 className="h-6 w-6 text-[#0D9488]" /></div>
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Welcome</p>
+                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">Let’s set up your rental command center.</h2>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">Keystone works best when it starts with your name, your portfolio, and at least one property. You can use sample data first or begin with your own clean workspace.</p>
+                <div className="mt-6 grid gap-2">
+                  {[
+                    { Icon: CheckSquare, title: "Track work", copy: "Tasks, reminders, and lease renewals stay visible." },
+                    { Icon: Wrench, title: "Handle maintenance", copy: "Open requests are grouped by property and priority." },
+                    { Icon: FileText, title: "Organize documents", copy: "Leases, inspections, receipts, and warranties live together." },
+                  ].map(({ Icon, title, copy }) => (
+                    <div key={title} className="flex gap-3 rounded-xl bg-background p-3">
+                      <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#1A3352]" />
+                      <div><p className="text-sm font-black text-foreground">{title}</p><p className="text-xs leading-5 text-muted-foreground">{copy}</p></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {step === 1 && (
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Your profile</p>
+                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">First, tell Keystone who is managing the portfolio.</h2>
+                <div className="mt-6 space-y-3">
+                  <Field label="Full name"><input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} className={inputClass} placeholder="Your name" /></Field>
+                  <Field label="Email"><input value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} type="email" className={inputClass} placeholder="you@email.com" /></Field>
+                  <Field label="Portfolio name"><input value={profile.portfolioName} onChange={(event) => setProfile({ ...profile, portfolioName: event.target.value })} className={inputClass} placeholder="My rental portfolio" /></Field>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Portfolio start</p>
+                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">Choose how you want to begin.</h2>
+                <div className="mt-6 grid gap-2 sm:grid-cols-2">
+                  <button type="button" onClick={() => setMode("sample")} className={`rounded-2xl border p-4 text-left transition-all ${mode === "sample" ? "border-[#1A3352] bg-[#1A3352]/5 ring-2 ring-[#1A3352]/10" : "border-border bg-background"}`}>
+                    <CheckCircle2 className={`mb-3 h-5 w-5 ${mode === "sample" ? "text-[#0D9488]" : "text-muted-foreground"}`} />
+                    <p className="text-sm font-black text-foreground">Use sample portfolio</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">Best for exploring the app with realistic data.</p>
+                  </button>
+                  <button type="button" onClick={() => setMode("fresh")} className={`rounded-2xl border p-4 text-left transition-all ${mode === "fresh" ? "border-[#1A3352] bg-[#1A3352]/5 ring-2 ring-[#1A3352]/10" : "border-border bg-background"}`}>
+                    <Plus className={`mb-3 h-5 w-5 ${mode === "fresh" ? "text-[#1A3352]" : "text-muted-foreground"}`} />
+                    <p className="text-sm font-black text-foreground">Start with my property</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">Create a clean workspace with one property.</p>
+                  </button>
+                </div>
+
+                {mode === "fresh" && (
+                  <div className="mt-5 space-y-3">
+                    <Field label="Property name"><input value={property.name} onChange={(event) => setProperty({ ...property, name: event.target.value })} className={inputClass} placeholder="Cedar Lane Apartments" /></Field>
+                    <Field label="Street address"><input value={property.address} onChange={(event) => setProperty({ ...property, address: event.target.value })} className={inputClass} placeholder="100 Cedar Lane" /></Field>
+                    <div className="grid grid-cols-[1fr_96px] gap-3">
+                      <Field label="City / ZIP"><input value={property.city} onChange={(event) => setProperty({ ...property, city: event.target.value })} className={inputClass} placeholder="Oakland, CA 94610" /></Field>
+                      <Field label="Units"><input value={property.units} onChange={(event) => setProperty({ ...property, units: Number(event.target.value || 1) })} type="number" min="1" className={inputClass} /></Field>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-7 flex items-center gap-2">
+              {step > 0 && <button type="button" onClick={() => setStep(step - 1)} className="rounded-xl border border-border bg-card px-4 py-3 text-sm font-black text-muted-foreground">Back</button>}
+              <button
+                type="button"
+                disabled={!canContinue}
+                onClick={() => step === 2 ? finish() : setStep(step + 1)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {step === 2 ? "Enter Keystone" : "Continue"}
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export default function App() {
   const [data, setData] = useStoredData();
+  const [profile, setProfile] = useStoredProfile();
+  const [onboarded, setOnboarded] = useState(() => localStorage.getItem("keystone-onboarding-complete") === "true");
   const [tab, setTab] = useState<Tab>("dashboard");
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
@@ -813,6 +1022,43 @@ export default function App() {
     setData(INITIAL_DATA);
   }
 
+  function completeOnboarding(setup: OnboardingSetup) {
+    setProfile(setup.profile);
+    if (setup.mode === "fresh" && setup.property) {
+      setData({
+        properties: [{
+          id: uid("p"),
+          name: setup.property.name,
+          address: setup.property.address || "Address not set",
+          city: setup.property.city || "City not set",
+          units: setup.property.units,
+          imageUrl: DEFAULT_IMAGES[0],
+        }],
+        tenants: [],
+        maintenance: [],
+        tasks: [{
+          id: uid("tk"),
+          title: "Add first tenant",
+          type: "reminder",
+          propertyId: "",
+          dueDate: "This week",
+          status: "pending",
+          priority: "medium",
+        }],
+        docs: [],
+      });
+    }
+    localStorage.setItem("keystone-onboarding-complete", "true");
+    setOnboarded(true);
+    setTab("dashboard");
+    setSelectedProperty(null);
+  }
+
+  function replayOnboarding() {
+    localStorage.removeItem("keystone-onboarding-complete");
+    setOnboarded(false);
+  }
+
   function exportData() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -824,7 +1070,7 @@ export default function App() {
   }
 
   function renderContent() {
-    if (tab === "dashboard") return <Dashboard data={data} onNav={navigate} />;
+    if (tab === "dashboard") return <Dashboard data={data} profile={profile} onNav={navigate} />;
     if (tab === "properties") {
       return selectedProperty ? (
         <PropertyDetail data={data} propertyId={selectedProperty} onBack={() => setSelectedProperty(null)} onAddTenant={() => setModal("tenant")} onAddMaintenance={() => setModal("maintenance")} onAddDocument={() => setModal("document")} updateMaintenance={updateMaintenance} />
@@ -834,12 +1080,16 @@ export default function App() {
     }
     if (tab === "tasks") return <Tasks data={data} onAdd={() => setModal("task")} toggleTask={toggleTask} />;
     if (tab === "documents") return <Documents data={data} onAdd={() => setModal("document")} />;
-    return <SettingsScreen data={data} resetData={resetData} exportData={exportData} />;
+    return <SettingsScreen data={data} profile={profile} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} />;
+  }
+
+  if (!onboarded) {
+    return <OnboardingFlow onComplete={completeOnboarding} />;
   }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar active={tab} onChange={navigate} badge={badge} />
+      <Sidebar active={tab} onChange={navigate} badge={badge} profile={profile} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <main className="flex-1 overflow-y-auto">{renderContent()}</main>
         <BottomNav active={tab} onChange={navigate} badge={badge} />
