@@ -11,6 +11,7 @@ import {
   CheckSquare,
   ChevronRight,
   ClipboardList,
+  Clock,
   DollarSign,
   Download,
   FileText,
@@ -396,6 +397,28 @@ function formatReminderTiming(days: number | null) {
   return `Due in ${days}d`;
 }
 
+function formatToday() {
+  return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date());
+}
+
+function dueTone(days: number | null, done = false) {
+  if (done) return "complete";
+  if (days !== null && days < 0) return "overdue";
+  if (days !== null && days <= 7) return "soon";
+  return "normal";
+}
+
+function dueLabel(value: string, done = false) {
+  if (done) return "Complete";
+  const days = daysUntil(value);
+  if (days === null) return value;
+  if (days < 0) return "Overdue";
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  if (days <= 7) return "Due soon";
+  return value;
+}
+
 function buildReminders(data: AppData): ReminderItem[] {
   const maintenance = data.maintenance
     .filter((item) => item.status !== "resolved" && item.priority === "high")
@@ -536,6 +559,127 @@ function EmptyState({ icon: Icon, title, subtitle }: { icon: React.ElementType; 
   );
 }
 
+function PriorityBadge({ priority }: { priority: "low" | "medium" | "high" }) {
+  const label = priority === "high" ? "Urgent" : priority === "medium" ? "Upcoming" : "Low";
+  return <Chip className={priorityStyle(priority)}>{label}</Chip>;
+}
+
+function TaskStatusBadge({ task }: { task: TaskItem }) {
+  const tone = dueTone(daysUntil(task.dueDate), task.status === "done");
+  const className = tone === "complete"
+    ? "border-teal-100 bg-teal-50 text-teal-700"
+    : tone === "overdue"
+      ? "border-red-100 bg-red-50 text-red-700"
+      : tone === "soon"
+        ? "border-amber-100 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-slate-100 text-slate-600";
+  return <Chip className={className}>{dueLabel(task.dueDate, task.status === "done")}</Chip>;
+}
+
+function StatusCard({ label, value, detail, icon: Icon, tone = "neutral" }: { label: string; value: string; detail: string; icon: React.ElementType; tone?: "neutral" | "urgent" | "warning" | "good" }) {
+  const toneClass = tone === "urgent"
+    ? "border-red-100 bg-red-50 text-red-700"
+    : tone === "warning"
+      ? "border-amber-100 bg-amber-50 text-amber-700"
+      : tone === "good"
+        ? "border-teal-100 bg-teal-50 text-teal-700"
+        : "border-border bg-card text-[#1A3352]";
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-white/65">
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-black leading-none tracking-[-0.04em] text-foreground">{value}</p>
+      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function QuickAction({ icon: Icon, label, detail, primary, onClick }: { icon: React.ElementType; label: string; detail: string; primary?: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex min-h-[76px] items-center gap-3 rounded-2xl border p-4 text-left transition-all focus-visible:ring-2 focus-visible:ring-[#1A3352]/30 active:scale-[0.99] ${
+        primary ? "border-[#1A3352] bg-[#1A3352] text-white shadow-sm" : "border-border bg-card text-foreground hover:border-[#1A3352]/25 hover:shadow-sm"
+      }`}
+    >
+      <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${primary ? "bg-white/15 text-white" : "bg-[#EAF8F6] text-[#0D9488]"}`}>
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0">
+        <span className={`block text-sm font-black leading-tight ${primary ? "text-white" : "text-foreground"}`}>{label}</span>
+        <span className={`mt-1 block text-xs leading-5 ${primary ? "text-white/70" : "text-muted-foreground"}`}>{detail}</span>
+      </span>
+    </button>
+  );
+}
+
+function TaskCard({ data, task, onToggle, onEdit, onDelete, compact = false }: { data: AppData; task: TaskItem; onToggle?: (id: string) => void; onEdit?: (task: TaskItem) => void; onDelete?: (id: string) => void; compact?: boolean }) {
+  const overdue = dueTone(daysUntil(task.dueDate), task.status === "done") === "overdue";
+  return (
+    <div className={`flex items-start gap-3 rounded-2xl border bg-card ${overdue ? "border-red-100" : "border-border"} ${compact ? "px-3 py-3" : "px-4 py-3.5"}`}>
+      {onToggle && (
+        <button onClick={() => onToggle(task.id)} className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all focus-visible:ring-2 focus-visible:ring-[#1A3352]/30 ${task.status === "done" ? "border-[#0D9488] bg-[#0D9488]" : "border-border hover:border-[#0D9488] hover:bg-teal-50"}`} aria-label="Toggle task">
+          {task.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
+        </button>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <TaskStatusBadge task={task} />
+          <PriorityBadge priority={task.priority} />
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black capitalize text-slate-600">{task.type}</span>
+        </div>
+        <p className={`mt-2 text-sm font-black leading-tight ${task.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}>{task.title}</p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{propertyName(data, task.propertyId)}</span>
+          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{task.dueDate}</span>
+        </div>
+      </div>
+      {(onEdit || onDelete) && (
+        <div className="flex flex-shrink-0 gap-1.5">
+          {onEdit && <IconAction label="Edit task" icon={Pencil} onClick={() => onEdit(task)} />}
+          {onDelete && <IconAction label="Delete task" icon={Trash2} tone="danger" onClick={() => onDelete(task.id)} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentCard({ data, doc, onEdit, onDelete }: { data: AppData; doc: DocItem; onEdit: (doc: DocItem) => void; onDelete: (id: string) => void }) {
+  return (
+    <div className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/20 hover:shadow-sm">
+      <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black capitalize text-slate-600">{doc.type}</span>
+          {doc.filePath && <span className="rounded-md bg-teal-50 px-2 py-0.5 text-[10px] font-black text-teal-700">File attached</span>}
+        </div>
+        <p className="truncate text-sm font-black text-foreground">{doc.name}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{propertyName(data, doc.propertyId)}{doc.tenantName ? ` - ${doc.tenantName}` : ""} - {doc.date} - {doc.size}</p>
+      </div>
+      <div className="flex flex-shrink-0 gap-2">
+        {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => openDocumentFile(doc.filePath!)} />}
+        <IconAction label="Edit document" icon={Pencil} onClick={() => onEdit(doc)} />
+        <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDelete(doc.id)} />
+      </div>
+    </div>
+  );
+}
+
+function ConfirmationToast({ message }: { message: string }) {
+  if (!message) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[60] flex justify-center px-4 lg:bottom-6">
+      <div className="flex max-w-sm items-center gap-2 rounded-2xl border border-teal-100 bg-white px-4 py-3 text-sm font-black text-foreground shadow-xl">
+        <CheckCircle2 className="h-4 w-4 text-[#0D9488]" />
+        <span>{message}</span>
+      </div>
+    </div>
+  );
+}
+
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return (parts[0]?.[0] || "U") + (parts[1]?.[0] || "");
@@ -576,7 +720,7 @@ function Sidebar({ active, onChange, badge, profile }: { active: Tab; onChange: 
     <aside className="hidden h-full w-[232px] flex-shrink-0 flex-col bg-[#1A3352] lg:flex">
       <div className="flex items-center gap-2.5 border-b border-white/10 px-5 py-[18px]">
         <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/15"><Home className="h-4 w-4 text-white" /></div>
-        <span className="text-[15px] font-black tracking-[-0.03em] text-white">Keystone</span>
+        <span className="text-[15px] font-black tracking-[-0.03em] text-white">Home Harbor</span>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
         {NAV_ITEMS.map(({ id, label, Icon }) => {
@@ -603,7 +747,7 @@ function Sidebar({ active, onChange, badge, profile }: { active: Tab; onChange: 
   );
 }
 
-function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onToggleNotifications }: { data: AppData; profile: AppProfile; reminders: ReminderItem[]; notificationsEnabled: boolean; onNav: (tab: Tab) => void; onToggleNotifications: () => void }) {
+function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onToggleNotifications, onAddTask, onAddMaintenance, onAddDocument, onOpenProperty }: { data: AppData; profile: AppProfile; reminders: ReminderItem[]; notificationsEnabled: boolean; onNav: (tab: Tab) => void; onToggleNotifications: () => void; onAddTask: () => void; onAddMaintenance: () => void; onAddDocument: () => void; onOpenProperty: (id: string) => void }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const totals = useMemo(() => {
     const units = data.properties.reduce((sum, p) => sum + p.units, 0);
@@ -612,21 +756,44 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
     const urgent = openMaintenance.filter((m) => m.priority === "high");
     const expiring = data.tenants.filter((t) => t.status === "expiring" || t.status === "expired");
     const pendingTasks = data.tasks.filter((t) => t.status === "pending");
-    return { units, revenue, openMaintenance, urgent, expiring, pendingTasks };
+    const overdueTasks = pendingTasks.filter((task) => {
+      const days = daysUntil(task.dueDate);
+      return days !== null && days < 0;
+    });
+    const dueSoonTasks = pendingTasks
+      .filter((task) => {
+        const days = daysUntil(task.dueDate);
+        return days === null || (days >= 0 && days <= 14) || task.priority === "high";
+      })
+      .sort((a, b) => (daysUntil(a.dueDate) ?? 999) - (daysUntil(b.dueDate) ?? 999));
+    return { units, revenue, openMaintenance, urgent, expiring, pendingTasks, overdueTasks, dueSoonTasks };
   }, [data]);
+  const vacant = Math.max(totals.units - data.tenants.length, 0);
+  const attentionCount = totals.urgent.length + totals.expiring.length + totals.overdueTasks.length;
+  const calm = attentionCount === 0;
 
   return (
-    <div className="pb-24 lg:pb-10">
-      <div className="px-4 pb-2 pt-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Friday, May 29, 2026</p>
-            <h1 className="mt-1 text-2xl font-black leading-tight tracking-[-0.03em] text-foreground">Good morning,<br />{profile.name.split(" ")[0] || "there"}.</h1>
-          </div>
-          <button onClick={() => setShowNotifications((visible) => !visible)} className="relative mt-1 flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted" aria-label="Notifications">
+    <div className="mx-auto w-full max-w-6xl pb-24 lg:pb-10">
+      <div className="px-4 pb-3 pt-6 lg:pt-8">
+        <div className="rounded-3xl border border-border bg-card p-5 shadow-sm lg:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{formatToday()}</p>
+              <h1 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground lg:text-3xl">Good morning, {profile.name.split(" ")[0] || "there"}.</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                {calm ? "Nothing urgent is blocking your portfolio right now." : `${attentionCount} item${attentionCount === 1 ? "" : "s"} need attention before the day gets away from you.`}
+              </p>
+            </div>
+            <button onClick={() => setShowNotifications((visible) => !visible)} className="relative flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-[#1A3352]/30" aria-label="Notifications">
             <Bell className="h-5 w-5 text-foreground/60" />
             {reminders.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-red-500 px-1 text-[10px] font-black text-white">{reminders.length > 9 ? "9+" : reminders.length}</span>}
-          </button>
+            </button>
+          </div>
+          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+            <QuickAction icon={CheckSquare} label="Add task" detail="Renewals, follow-ups, inspections" primary onClick={onAddTask} />
+            <QuickAction icon={Wrench} label="Log maintenance" detail="Capture an issue before it slips" onClick={onAddMaintenance} />
+            <QuickAction icon={Upload} label="Upload document" detail="Store leases, receipts, notices" onClick={onAddDocument} />
+          </div>
         </div>
       </div>
 
@@ -638,7 +805,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                 <p className="text-sm font-black text-foreground">Reminders</p>
                 <p className="text-xs text-muted-foreground">{notificationsEnabled ? "Browser notifications enabled" : "In-app reminders active"}</p>
               </div>
-              <button onClick={onToggleNotifications} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-black text-[#1A3352]">
+              <button onClick={onToggleNotifications} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-black text-[#1A3352] focus-visible:ring-2 focus-visible:ring-[#1A3352]/30">
                 {notificationsEnabled ? "On" : "Enable"}
               </button>
             </div>
@@ -660,19 +827,11 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
         </section>
       )}
 
-      <div className="grid grid-cols-2 gap-2.5 px-4 pb-6 pt-5">
-        {[
-          { label: "Properties", value: String(data.properties.length), sub: `${totals.units} total units`, alert: false },
-          { label: "Tenants", value: String(data.tenants.length), sub: `${Math.max(totals.units - data.tenants.length, 0)} vacant units`, alert: false },
-          { label: "Open Requests", value: String(totals.openMaintenance.length), sub: `${totals.urgent.length} high priority`, alert: totals.openMaintenance.length > 0 },
-          { label: "Monthly Revenue", value: money(totals.revenue), sub: "scheduled rent", alert: false },
-        ].map((item) => (
-          <div key={item.label} className={`rounded-2xl border p-4 ${item.alert ? "border-red-100 bg-red-50" : "border-border bg-card"}`}>
-            <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">{item.label}</p>
-            <p className={`text-[22px] font-black leading-none tracking-[-0.04em] ${item.alert ? "text-red-700" : "text-foreground"}`}>{item.value}</p>
-            <p className="mt-1.5 text-[11px] leading-tight text-muted-foreground">{item.sub}</p>
-          </div>
-        ))}
+      <div className="grid gap-3 px-4 pb-6 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatusCard label="Needs attention" value={String(attentionCount)} detail={calm ? "No urgent work" : "Urgent, overdue, or expiring"} icon={AlertTriangle} tone={attentionCount > 0 ? "urgent" : "good"} />
+        <StatusCard label="Due soon" value={String(totals.dueSoonTasks.length)} detail="Next 14 days" icon={Clock} tone={totals.dueSoonTasks.length > 0 ? "warning" : "neutral"} />
+        <StatusCard label="Open requests" value={String(totals.openMaintenance.length)} detail={`${totals.urgent.length} urgent maintenance`} icon={Wrench} tone={totals.urgent.length > 0 ? "urgent" : "neutral"} />
+        <StatusCard label="Portfolio" value={`${data.properties.length}`} detail={`${totals.units} units, ${vacant} vacant`} icon={Building2} />
       </div>
 
       {(totals.urgent.length > 0 || totals.expiring.length > 0) && (
@@ -716,22 +875,58 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
       )}
 
       <section className="mb-6 px-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2"><ClipboardList className="h-4 w-4 text-[#0D9488]" /><h2 className="text-sm font-black tracking-tight text-foreground">Coming Up</h2></div>
-          <button onClick={() => onNav("tasks")} className="text-xs font-black text-[#1A3352] hover:opacity-60">See all</button>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2"><ClipboardList className="h-4 w-4 text-[#0D9488]" /><h2 className="text-sm font-black tracking-tight text-foreground">Overdue & Due Soon</h2></div>
+          <button onClick={() => onNav("tasks")} className="text-xs font-black text-[#1A3352] hover:opacity-60 focus-visible:ring-2 focus-visible:ring-[#1A3352]/30">See all</button>
         </div>
         <div className="space-y-2">
-          {totals.pendingTasks.slice(0, 5).map((task) => (
-            <div key={task.id} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-              <span className="h-2 w-2 flex-shrink-0 rounded-full bg-[#0D9488]" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-bold leading-tight text-foreground">{task.title}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{task.dueDate}</p>
-              </div>
-              <Chip className={priorityStyle(task.priority)}>{task.priority}</Chip>
-            </div>
+          {[...totals.overdueTasks, ...totals.dueSoonTasks.filter((task) => !totals.overdueTasks.some((overdue) => overdue.id === task.id))].slice(0, 6).map((task) => (
+            <TaskCard key={task.id} data={data} task={task} compact />
           ))}
           {totals.pendingTasks.length === 0 && <EmptyState icon={CheckCircle2} title="All caught up" subtitle="No open tasks right now." />}
+          {totals.pendingTasks.length > 0 && totals.overdueTasks.length === 0 && totals.dueSoonTasks.length === 0 && <EmptyState icon={Clock} title="Nothing pressing this week" subtitle="Your open tasks are scheduled farther out." />}
+        </div>
+      </section>
+
+      <section className="grid gap-6 px-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-[#1A3352]" /><h2 className="text-sm font-black tracking-tight text-foreground">Property Status</h2></div>
+            <button onClick={() => onNav("properties")} className="text-xs font-black text-[#1A3352] hover:opacity-60">Open properties</button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {data.properties.slice(0, 4).map((property) => {
+              const stats = propertyStats(data, property.id);
+              const openIssues = data.maintenance.filter((item) => item.propertyId === property.id && item.status !== "resolved").length;
+              return (
+                <button key={property.id} onClick={() => onOpenProperty(property.id)} className="rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/25 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-[#1A3352]/30">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-foreground">{property.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{stats.occupiedUnits}/{property.units} occupied</p>
+                    </div>
+                    <Chip className={openIssues > 0 ? "border-red-100 bg-red-50 text-red-700" : "border-teal-100 bg-teal-50 text-teal-700"}>{openIssues > 0 ? `${openIssues} open` : "Clear"}</Chip>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-[#0D9488]" style={{ width: `${Math.min((stats.occupiedUnits / Math.max(property.units, 1)) * 100, 100)}%` }} />
+                  </div>
+                </button>
+              );
+            })}
+            {data.properties.length === 0 && <div className="sm:col-span-2"><EmptyState icon={Building2} title="Add your first property" subtitle="Once a property is added, status cards will appear here." /></div>}
+          </div>
+        </div>
+        <div>
+          <div className="mb-3 flex items-center gap-2"><Clock className="h-4 w-4 text-[#0D9488]" /><h2 className="text-sm font-black tracking-tight text-foreground">Recent Activity</h2></div>
+          <div className="space-y-2">
+            {[...data.maintenance.slice(-2).map((item) => ({ id: `m-${item.id}`, title: item.title, detail: `${propertyName(data, item.propertyId)} - ${item.status}`, Icon: Wrench })), ...data.docs.slice(-2).map((doc) => ({ id: `d-${doc.id}`, title: doc.name, detail: `${propertyName(data, doc.propertyId)} - ${doc.type}`, Icon: FileText }))].reverse().map(({ id, title, detail, Icon }) => (
+              <div key={id} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#EAF8F6]"><Icon className="h-4 w-4 text-[#0D9488]" /></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-black text-foreground">{title}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p></div>
+              </div>
+            ))}
+            {data.maintenance.length === 0 && data.docs.length === 0 && <EmptyState icon={Clock} title="No recent activity" subtitle="New maintenance and documents will appear here." />}
+          </div>
         </div>
       </section>
     </div>
@@ -936,26 +1131,27 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
 
 function Tasks({ data, onAdd, onEdit, onDelete, toggleTask }: { data: AppData; onAdd: () => void; onEdit: (task: TaskItem) => void; onDelete: (id: string) => void; toggleTask: (id: string) => void }) {
   const [filter, setFilter] = useState<"all" | "high" | "medium" | "low" | "done">("all");
-  const visible = data.tasks.filter((task) => filter === "done" ? task.status === "done" : task.status === "pending" && (filter === "all" || task.priority === filter));
+  const visible = data.tasks
+    .filter((task) => filter === "done" ? task.status === "done" : task.status === "pending" && (filter === "all" || task.priority === filter))
+    .sort((a, b) => (daysUntil(a.dueDate) ?? 999) - (daysUntil(b.dueDate) ?? 999));
   const highCount = data.tasks.filter((task) => task.status === "pending" && task.priority === "high").length;
+  const overdueCount = data.tasks.filter((task) => task.status === "pending" && (daysUntil(task.dueDate) ?? 1) < 0).length;
 
   return (
-    <div className="pb-24 lg:pb-10">
-      <PageHeader title="Tasks" subtitle={`${data.tasks.filter((t) => t.status === "pending").length} open - ${highCount} urgent`} action={<AddButton label="Add" onClick={onAdd} />} />
+    <div className="mx-auto w-full max-w-5xl pb-24 lg:pb-10">
+      <PageHeader title="Tasks" subtitle={`${data.tasks.filter((t) => t.status === "pending").length} open - ${overdueCount} overdue - ${highCount} urgent`} action={<AddButton label="Add" onClick={onAdd} />} />
+      <div className="px-4 pt-4">
+        <div className="mb-3 rounded-2xl border border-border bg-card p-4">
+          <p className="text-sm font-black text-foreground">Work queue</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">Sorted by due date so renewals, inspections, and follow-ups surface before lower-pressure work.</p>
+        </div>
+      </div>
       <div className="flex gap-2 overflow-x-auto px-4 py-3">
         {(["all", "high", "medium", "low", "done"] as const).map((item) => <button key={item} onClick={() => setFilter(item)} className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-black capitalize transition-all ${filter === item ? "bg-[#1A3352] text-white" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}>{item}</button>)}
       </div>
       <div className="space-y-2 px-4">
         {visible.length === 0 ? <EmptyState icon={CheckCircle2} title="Nothing here" subtitle="Try a different filter or add a task." /> : visible.map((task) => (
-          <div key={task.id} className="flex items-start gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
-            <button onClick={() => toggleTask(task.id)} className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all ${task.status === "done" ? "border-[#0D9488] bg-[#0D9488]" : "border-border hover:border-[#0D9488] hover:bg-teal-50"}`} aria-label="Toggle task">{task.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}</button>
-            <div className="min-w-0 flex-1"><p className={`text-[13px] font-bold leading-tight ${task.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}>{task.title}</p><div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{propertyName(data, task.propertyId)}</span><span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{task.dueDate}</span></div></div>
-            <div className="flex flex-shrink-0 flex-col items-end gap-1.5"><Chip className={priorityStyle(task.priority)}>{task.priority}</Chip><span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black capitalize text-slate-600">{task.type}</span></div>
-            <div className="flex flex-shrink-0 flex-col gap-1.5">
-              <IconAction label="Edit task" icon={Pencil} onClick={() => onEdit(task)} />
-              <IconAction label="Delete task" icon={Trash2} tone="danger" onClick={() => onDelete(task.id)} />
-            </div>
-          </div>
+          <TaskCard key={task.id} data={data} task={task} onToggle={toggleTask} onEdit={onEdit} onDelete={onDelete} />
         ))}
       </div>
     </div>
@@ -971,7 +1167,7 @@ function Documents({ data, onAdd, onEdit, onDelete }: { data: AppData; onAdd: ()
   });
 
   return (
-    <div className="pb-24 lg:pb-10">
+    <div className="mx-auto w-full max-w-5xl pb-24 lg:pb-10">
       <PageHeader title="Documents" subtitle={`${data.docs.length} files`} action={<AddButton label="Upload" onClick={onAdd} />} />
       <div className="px-4 pb-2 pt-3">
         <div className="mb-3"><SearchInput value={query} onChange={setQuery} placeholder="Search documents..." /></div>
@@ -981,15 +1177,7 @@ function Documents({ data, onAdd, onEdit, onDelete }: { data: AppData; onAdd: ()
       </div>
       <div className="space-y-2 px-4">
         {filtered.length === 0 ? <EmptyState icon={FileText} title="No documents found" /> : filtered.map((doc) => (
-          <div key={doc.id} className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/20 hover:shadow-sm">
-            <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
-            <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-bold text-foreground">{doc.name}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{propertyName(data, doc.propertyId)}{doc.tenantName ? ` - ${doc.tenantName}` : ""} - {doc.date} - {doc.size}{doc.fileName ? ` - ${doc.fileName}` : ""}</p></div>
-            <div className="flex flex-shrink-0 gap-2">
-              {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => openDocumentFile(doc.filePath!)} />}
-              <IconAction label="Edit document" icon={Pencil} onClick={() => onEdit(doc)} />
-              <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDelete(doc.id)} />
-            </div>
-          </div>
+          <DocumentCard key={doc.id} data={data} doc={doc} onEdit={onEdit} onDelete={onDelete} />
         ))}
       </div>
     </div>
@@ -1204,7 +1392,7 @@ function SettingsScreen({ data, profile, userId, activeTab, notificationsEnabled
           <Lock className="h-4 w-4" />
           Sign out
         </button>
-        <div className="pb-4 pt-6 text-center"><p className="text-xs font-bold text-muted-foreground">Keystone - v1.1.0</p><p className="mt-0.5 text-xs text-muted-foreground">Your rentals, organized.</p></div>
+        <div className="pb-4 pt-6 text-center"><p className="text-xs font-bold text-muted-foreground">Home Harbor - v1.1.0</p><p className="mt-0.5 text-xs text-muted-foreground">Your rentals, organized.</p></div>
       </div>
     </div>
   );
@@ -1313,7 +1501,7 @@ function AuthShell({ children, eyebrow, title, subtitle }: { children: React.Rea
         <div>
           <div className="mb-10 flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Home className="h-5 w-5" /></div>
-            <span className="text-lg font-black tracking-[-0.03em]">Keystone</span>
+            <span className="text-lg font-black tracking-[-0.03em]">Home Harbor</span>
           </div>
           <h1 className="max-w-md text-4xl font-black leading-tight tracking-[-0.05em]">Your rental data, tied to your account.</h1>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/68">Sign in on your Mac, iPhone, or iPad and keep the same portfolio synced through Supabase.</p>
@@ -1336,7 +1524,7 @@ function AuthShell({ children, eyebrow, title, subtitle }: { children: React.Rea
         <div className="w-full max-w-[440px]">
           <div className="mb-6 flex items-center gap-2 lg:hidden">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1A3352] text-white"><Home className="h-4 w-4" /></div>
-            <span className="font-black tracking-[-0.03em] text-foreground">Keystone</span>
+            <span className="font-black tracking-[-0.03em] text-foreground">Home Harbor</span>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
             <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{eyebrow}</p>
@@ -1437,7 +1625,7 @@ function AuthScreen() {
   return (
     <AuthShell
       eyebrow={mode === "signin" ? "Welcome back" : "Create account"}
-      title={mode === "signin" ? "Sign in to Keystone." : "Start your Keystone account."}
+      title={mode === "signin" ? "Sign in to Home Harbor." : "Start your Home Harbor account."}
       subtitle="Your portfolio syncs to the cloud after you sign in."
     >
       <form onSubmit={submit} className="mt-6 space-y-3">
@@ -1496,7 +1684,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
         <div>
           <div className="mb-10 flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Home className="h-5 w-5" /></div>
-            <span className="text-lg font-black tracking-[-0.03em]">Keystone</span>
+            <span className="text-lg font-black tracking-[-0.03em]">Home Harbor</span>
           </div>
           <h1 className="max-w-md text-4xl font-black leading-tight tracking-[-0.05em]">Bring your rentals into focus before the day starts.</h1>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/68">Set up the essentials once, then manage properties, tenants, tasks, maintenance, and documents from one calm workspace.</p>
@@ -1520,7 +1708,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2 lg:hidden">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1A3352] text-white"><Home className="h-4 w-4" /></div>
-              <span className="font-black tracking-[-0.03em] text-foreground">Keystone</span>
+              <span className="font-black tracking-[-0.03em] text-foreground">Home Harbor</span>
             </div>
             <div className="ml-auto flex gap-1.5">
               {steps.map((label, index) => (
@@ -1535,7 +1723,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
                 <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EAF8F6]"><Building2 className="h-6 w-6 text-[#0D9488]" /></div>
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Welcome</p>
                 <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">Let’s set up your rental command center.</h2>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">Keystone works best when it starts with your name, your portfolio, and at least one property. You can use sample data first or begin with your own clean workspace.</p>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">Home Harbor works best when it starts with your name, your portfolio, and at least one property. You can use sample data first or begin with your own clean workspace.</p>
                 <div className="mt-6 grid gap-2">
                   {[
                     { Icon: CheckSquare, title: "Track work", copy: "Tasks, reminders, and lease renewals stay visible." },
@@ -1554,7 +1742,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
             {step === 1 && (
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Your profile</p>
-                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">First, tell Keystone who is managing the portfolio.</h2>
+                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">First, tell Home Harbor who is managing the portfolio.</h2>
                 <div className="mt-6 space-y-3">
                   <Field label="Full name"><input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} className={inputClass} placeholder="Your name" /></Field>
                   <Field label="Email"><input value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} type="email" className={inputClass} placeholder="you@email.com" /></Field>
@@ -1601,7 +1789,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
                 onClick={() => step === 2 ? finish() : setStep(step + 1)}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {step === 2 ? "Enter Keystone" : "Continue"}
+                {step === 2 ? "Enter Home Harbor" : "Continue"}
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
@@ -1629,6 +1817,7 @@ export default function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem("keystone-browser-notifications") === "true");
   const [analyticsEnabled, setAnalyticsEnabled] = useState(() => localStorage.getItem("home-harbor-analytics-enabled") !== "false");
   const [lastNotificationKey, setLastNotificationKey] = useState("");
+  const [toast, setToast] = useState("");
 
   const serializedData = JSON.stringify(data);
   const serializedProfile = JSON.stringify(profile);
@@ -1730,6 +1919,11 @@ export default function App() {
     void recordAnalyticsEvent(session?.user.id, eventName, metadata).catch(() => {});
   }
 
+  function showToast(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 2600);
+  }
+
   useEffect(() => {
     if (session?.user.id && onboarded) track("app_opened", { tab });
   }, [session?.user.id, onboarded]);
@@ -1738,6 +1932,12 @@ export default function App() {
     setTab(next);
     if (next !== "properties") setSelectedProperty(null);
     track("section_opened", { section: next });
+  }
+
+  function openPropertyFromDashboard(id: string) {
+    setSelectedProperty(id);
+    setTab("properties");
+    track("property_opened", { source: "dashboard" });
   }
 
   function openAdd(kind: Exclude<ModalKind, null>) {
@@ -1815,6 +2015,7 @@ export default function App() {
       return { ...current, docs: previous ? current.docs.map((doc) => doc.id === previous.id ? nextDoc : doc) : [...current.docs, nextDoc] };
       });
       track(editing ? "record_updated" : "record_created", { kind });
+      showToast(editing ? "Changes saved." : "Added successfully.");
       closeModal();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Save failed.");
@@ -1844,6 +2045,7 @@ export default function App() {
       return { ...current, docs: current.docs.filter((doc) => doc.id !== id) };
     });
     track("record_deleted", { kind });
+    showToast("Deleted.");
 
     if (kind === "property" && selectedProperty === id) {
       setSelectedProperty(null);
@@ -1852,15 +2054,18 @@ export default function App() {
 
   function updateMaintenance(id: string, status: MaintenanceItem["status"]) {
     setData((current) => ({ ...current, maintenance: current.maintenance.map((item) => item.id === id ? { ...item, status } : item) }));
+    showToast(status === "resolved" ? "Maintenance marked resolved." : "Maintenance reopened.");
   }
 
   function toggleTask(id: string) {
     setData((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, status: task.status === "done" ? "pending" : "done" } : task) }));
+    showToast("Task updated.");
   }
 
   function resetData() {
     localStorage.removeItem("keystone-rental-data");
     setData(INITIAL_DATA);
+    showToast("Demo data reset.");
   }
 
   function completeOnboarding(setup: OnboardingSetup) {
@@ -1911,6 +2116,7 @@ export default function App() {
       localStorage.removeItem("keystone-browser-notifications");
       setNotificationsEnabled(false);
       track("notifications_disabled");
+      showToast("Notifications turned off.");
       return;
     }
 
@@ -1922,6 +2128,7 @@ export default function App() {
         body: "You will be notified when urgent rental items need attention.",
       });
       track("notifications_enabled");
+      showToast("Notifications enabled.");
     } else {
       window.alert("Notifications were not enabled. You can allow them later in browser settings.");
     }
@@ -1938,14 +2145,15 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "keystone-rental-data.json";
+    link.download = "home-harbor-rental-data.json";
     link.click();
     URL.revokeObjectURL(url);
     track("data_exported", { properties: data.properties.length, tenants: data.tenants.length });
+    showToast("Export downloaded.");
   }
 
   function renderContent() {
-    if (tab === "dashboard") return <Dashboard data={data} profile={profile} reminders={reminders} notificationsEnabled={notificationsEnabled} onNav={navigate} onToggleNotifications={toggleNotifications} />;
+    if (tab === "dashboard") return <Dashboard data={data} profile={profile} reminders={reminders} notificationsEnabled={notificationsEnabled} onNav={navigate} onToggleNotifications={toggleNotifications} onAddTask={() => openAdd("task")} onAddMaintenance={() => openAdd("maintenance")} onAddDocument={() => openAdd("document")} onOpenProperty={openPropertyFromDashboard} />;
     if (tab === "properties") {
       return selectedProperty ? (
         <PropertyDetail
@@ -1983,7 +2191,7 @@ export default function App() {
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
           <Home className="mx-auto mb-3 h-8 w-8 text-[#1A3352]" />
-          <p className="text-sm font-black text-foreground">Loading Keystone...</p>
+          <p className="text-sm font-black text-foreground">Loading Home Harbor...</p>
           <p className="mt-1 text-xs text-muted-foreground">Checking your account session.</p>
         </div>
       </div>
@@ -2024,6 +2232,7 @@ export default function App() {
         <BottomNav active={tab} onChange={navigate} badge={badge} />
       </div>
       <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={savingRecord} onClose={closeModal} onSave={save} />
+      <ConfirmationToast message={toast} />
     </div>
   );
 }
