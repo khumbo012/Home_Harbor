@@ -3,6 +3,7 @@ import { createClient, type Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
   ArrowLeft,
+  BarChart3,
   Bell,
   Building2,
   Calendar,
@@ -18,6 +19,7 @@ import {
   Lock,
   Mail,
   MapPin,
+  MessageSquare,
   Phone,
   Pencil,
   Plus,
@@ -25,6 +27,7 @@ import {
   Search,
   Settings,
   Shield,
+  Scale,
   Trash2,
   Upload,
   User,
@@ -134,6 +137,19 @@ interface ReminderItem {
   detail: string;
   severity: "high" | "medium" | "low";
   tab: Tab;
+}
+
+interface FeedbackItem {
+  type: "bug" | "idea" | "question" | "other";
+  message: string;
+  email?: string;
+  page?: string;
+}
+
+interface AnalyticsSummary {
+  totalEvents: number;
+  lastEventAt: string | null;
+  topEvents: { name: string; count: number }[];
 }
 
 const DEFAULT_PROFILE: AppProfile = {
@@ -284,6 +300,58 @@ async function openDocumentFile(filePath: string) {
   }
 
   window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
+
+async function submitFeedback(userId: string, feedback: FeedbackItem) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { error } = await supabase.from("feedback").insert({
+    user_id: userId,
+    type: feedback.type,
+    message: feedback.message,
+    email: feedback.email || null,
+    page: feedback.page || null,
+    user_agent: navigator.userAgent,
+  });
+
+  if (error) throw error;
+}
+
+async function recordAnalyticsEvent(userId: string | undefined, eventName: string, metadata: Record<string, unknown> = {}) {
+  if (!supabase || !userId || localStorage.getItem("home-harbor-analytics-enabled") === "false") return;
+
+  await supabase.from("analytics_events").insert({
+    user_id: userId,
+    event_name: eventName,
+    metadata,
+    path: window.location.pathname,
+    user_agent: navigator.userAgent,
+  });
+}
+
+async function loadAnalyticsSummary(userId: string): Promise<AnalyticsSummary> {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { data, error } = await supabase
+    .from("analytics_events")
+    .select("event_name,created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(250);
+
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const event of data || []) counts.set(event.event_name, (counts.get(event.event_name) || 0) + 1);
+
+  return {
+    totalEvents: data?.length || 0,
+    lastEventAt: data?.[0]?.created_at || null,
+    topEvents: [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5),
+  };
 }
 
 function uid(prefix: string) {
@@ -928,13 +996,174 @@ function Documents({ data, onAdd, onEdit, onDelete }: { data: AppData; onAdd: ()
   );
 }
 
-function SettingsScreen({ data, profile, notificationsEnabled, resetData, exportData, replayOnboarding, onToggleNotifications, onSignOut }: { data: AppData; profile: AppProfile; notificationsEnabled: boolean; resetData: () => void; exportData: () => void; replayOnboarding: () => void; onToggleNotifications: () => void; onSignOut: () => void }) {
+function LegalPage({ kind, onBack }: { kind: "privacy" | "terms"; onBack: () => void }) {
+  const privacy = kind === "privacy";
+  const sections = privacy ? [
+    { title: "What Home Harbor Stores", body: "Your account stores profile details, property records, tenant details, maintenance notes, tasks, document metadata, uploaded files, feedback, and basic product analytics when enabled." },
+    { title: "How Data Is Used", body: "Data is used to run your rental workspace, sync across devices, send reminders, improve beta quality, and respond to support requests. Home Harbor does not sell personal data." },
+    { title: "Security", body: "Portfolio data is protected by Supabase authentication and row-level security policies so signed-in users can access only their own records." },
+    { title: "Your Choices", body: "You can export your portfolio, turn analytics off, delete demo data, and sign out from Settings. Uploaded documents remain private in the secured documents bucket." },
+  ] : [
+    { title: "Beta Software", body: "Home Harbor is beta software. Features may change, and you should keep independent copies of critical leases, notices, financial records, and legal documents." },
+    { title: "No Legal Advice", body: "The app helps organize rental operations, but it does not provide legal, tax, accounting, or compliance advice." },
+    { title: "User Responsibility", body: "You are responsible for the accuracy of information you enter and for following local housing, privacy, notice, and document retention laws." },
+    { title: "Acceptable Use", body: "Do not upload unlawful content, malware, or data you do not have permission to store. Access is intended for your own portfolio management." },
+  ];
+
+  return (
+    <div className="pb-24 lg:pb-10">
+      <PageHeader title={privacy ? "Privacy Policy" : "Terms of Use"} subtitle="Beta draft for public testing" onBack={onBack} />
+      <div className="space-y-3 px-4 pt-4">
+        <div className="rounded-2xl border border-[#1A3352]/15 bg-card p-5">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF8F6]">
+            {privacy ? <Shield className="h-5 w-5 text-[#0D9488]" /> : <Scale className="h-5 w-5 text-[#0D9488]" />}
+          </div>
+          <p className="text-lg font-black tracking-[-0.03em] text-foreground">{privacy ? "Your rental data stays yours." : "Clear terms for beta use."}</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Last updated August 8, 2026. This draft should be reviewed by a qualified attorney before a full public launch.</p>
+        </div>
+        {sections.map((section) => (
+          <section key={section.title} className="rounded-2xl border border-border bg-card p-4">
+            <h2 className="text-sm font-black tracking-[-0.015em] text-foreground">{section.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{section.body}</p>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeedbackScreen({ profile, userId, currentPage, onBack, onTrack }: { profile: AppProfile; userId: string; currentPage: string; onBack: () => void; onTrack: (eventName: string, metadata?: Record<string, unknown>) => void }) {
+  const [type, setType] = useState<FeedbackItem["type"]>("bug");
+  const [message, setMessage] = useState("");
+  const [email, setEmail] = useState(profile.email);
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setStatus("");
+    try {
+      await submitFeedback(userId, { type, message: message.trim(), email: email.trim(), page: currentPage });
+      onTrack("feedback_submitted", { type, page: currentPage });
+      setMessage("");
+      setStatus("Thanks. Your feedback was sent.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Feedback could not be sent.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="pb-24 lg:pb-10">
+      <PageHeader title="Feedback" subtitle="Help shape the beta" onBack={onBack} />
+      <div className="px-4 pt-4">
+        <form onSubmit={submit} className="rounded-2xl border border-border bg-card p-5">
+          <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF8F6]"><MessageSquare className="h-5 w-5 text-[#0D9488]" /></div>
+          <p className="text-lg font-black tracking-[-0.03em] text-foreground">Tell us what happened.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Bug reports, feature ideas, confusing screens, and beta notes all land in your Supabase feedback table.</p>
+          <div className="mt-5 space-y-3">
+            <Field label="Type">
+              <select value={type} onChange={(event) => setType(event.target.value as FeedbackItem["type"])} className={inputClass}>
+                <option value="bug">Bug report</option>
+                <option value="idea">Feature idea</option>
+                <option value="question">Question</option>
+                <option value="other">Other</option>
+              </select>
+            </Field>
+            <Field label="Message">
+              <textarea value={message} onChange={(event) => setMessage(event.target.value)} required rows={5} className={inputClass} placeholder="What should we know?" />
+            </Field>
+            <Field label="Reply email">
+              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className={inputClass} placeholder="Optional" />
+            </Field>
+          </div>
+          {status && <p className="mt-3 rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">{status}</p>}
+          <button disabled={busy || message.trim().length < 4} className="mt-4 w-full rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white disabled:opacity-50">
+            {busy ? "Sending..." : "Send feedback"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsScreen({ userId, analyticsEnabled, setAnalyticsEnabled, onBack, onTrack }: { userId: string; analyticsEnabled: boolean; setAnalyticsEnabled: (enabled: boolean) => void; onBack: () => void; onTrack: (eventName: string, metadata?: Record<string, unknown>) => void }) {
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [status, setStatus] = useState("Loading analytics...");
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAnalyticsSummary(userId)
+      .then((nextSummary) => {
+        if (cancelled) return;
+        setSummary(nextSummary);
+        setStatus("");
+      })
+      .catch((error) => {
+        if (!cancelled) setStatus(error instanceof Error ? error.message : "Analytics could not be loaded.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  function toggleAnalytics() {
+    const next = !analyticsEnabled;
+    localStorage.setItem("home-harbor-analytics-enabled", String(next));
+    setAnalyticsEnabled(next);
+    if (next) onTrack("analytics_enabled");
+  }
+
+  return (
+    <div className="pb-24 lg:pb-10">
+      <PageHeader title="Analytics" subtitle="First-party beta signals" onBack={onBack} />
+      <div className="space-y-3 px-4 pt-4">
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF8F6]"><BarChart3 className="h-5 w-5 text-[#0D9488]" /></div>
+          <p className="text-lg font-black tracking-[-0.03em] text-foreground">Privacy-friendly product analytics.</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Home Harbor records simple events like page opens, creates, updates, deletes, and feedback submissions to your own Supabase project.</p>
+          <button onClick={toggleAnalytics} className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-black ${analyticsEnabled ? "bg-[#1A3352] text-white" : "border border-border bg-card text-muted-foreground"}`}>
+            Analytics {analyticsEnabled ? "on" : "off"}
+          </button>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4">
+          <p className="text-sm font-black text-foreground">Recent activity</p>
+          {status && <p className="mt-2 text-sm leading-6 text-muted-foreground">{status}</p>}
+          {summary && (
+            <div className="mt-3 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-background p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Events</p><p className="mt-1 text-xl font-black text-foreground">{summary.totalEvents}</p></div>
+                <div className="rounded-xl bg-background p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Last event</p><p className="mt-1 truncate text-xs font-bold text-foreground">{summary.lastEventAt ? new Date(summary.lastEventAt).toLocaleString() : "None yet"}</p></div>
+              </div>
+              {summary.topEvents.length === 0 ? <EmptyState icon={BarChart3} title="No analytics yet" subtitle="Events appear as testers use the app." /> : summary.topEvents.map((event) => (
+                <div key={event.name} className="flex items-center justify-between rounded-xl bg-background px-3 py-2">
+                  <span className="text-xs font-bold text-foreground">{event.name.replace(/_/g, " ")}</span>
+                  <span className="text-xs font-black text-muted-foreground">{event.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsScreen({ data, profile, userId, activeTab, notificationsEnabled, analyticsEnabled, setAnalyticsEnabled, resetData, exportData, replayOnboarding, onToggleNotifications, onSignOut, onTrack }: { data: AppData; profile: AppProfile; userId: string; activeTab: Tab; notificationsEnabled: boolean; analyticsEnabled: boolean; setAnalyticsEnabled: (enabled: boolean) => void; resetData: () => void; exportData: () => void; replayOnboarding: () => void; onToggleNotifications: () => void; onSignOut: () => void; onTrack: (eventName: string, metadata?: Record<string, unknown>) => void }) {
+  const [view, setView] = useState<"main" | "privacy" | "terms" | "feedback" | "analytics">("main");
   const monthly = data.tenants.reduce((sum, tenant) => sum + Number(tenant.rent || 0), 0);
   const items = [
     { section: "Portfolio", rows: [{ Icon: Building2, label: "Properties", value: `${data.properties.length} active` }, { Icon: Users, label: "Tenants", value: `${data.tenants.length} active` }, { Icon: DollarSign, label: "Rent roll", value: `${money(monthly)}/mo` }] },
-    { section: "Preferences", rows: [{ Icon: Bell, label: "Notifications", value: "Email & push" }, { Icon: Calendar, label: "Lease renewal alerts", value: "60 days before" }] },
-    { section: "Account", rows: [{ Icon: Shield, label: "Security", value: "" }, { Icon: Lock, label: "Privacy", value: "" }, { Icon: HelpCircle, label: "Help & support", value: "" }] },
+    { section: "Preferences", rows: [{ Icon: Bell, label: "Notifications", value: notificationsEnabled ? "On" : "Off", action: onToggleNotifications }, { Icon: BarChart3, label: "Analytics", value: analyticsEnabled ? "On" : "Off", view: "analytics" as const }, { Icon: Calendar, label: "Lease renewal alerts", value: "60 days before" }] },
+    { section: "Account", rows: [{ Icon: Shield, label: "Security", value: "RLS protected" }, { Icon: Lock, label: "Privacy", value: "", view: "privacy" as const }, { Icon: Scale, label: "Terms of use", value: "", view: "terms" as const }, { Icon: MessageSquare, label: "Feedback", value: "Beta", view: "feedback" as const }, { Icon: HelpCircle, label: "Help & support", value: "" }] },
   ];
+
+  if (view === "privacy") return <LegalPage kind="privacy" onBack={() => setView("main")} />;
+  if (view === "terms") return <LegalPage kind="terms" onBack={() => setView("main")} />;
+  if (view === "feedback") return <FeedbackScreen profile={profile} userId={userId} currentPage={activeTab} onBack={() => setView("main")} onTrack={onTrack} />;
+  if (view === "analytics") return <AnalyticsScreen userId={userId} analyticsEnabled={analyticsEnabled} setAnalyticsEnabled={setAnalyticsEnabled} onBack={() => setView("main")} onTrack={onTrack} />;
 
   return (
     <div className="pb-24 lg:pb-10">
@@ -948,12 +1177,12 @@ function SettingsScreen({ data, profile, notificationsEnabled, resetData, export
           <div key={section.section} className="mb-5">
             <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">{section.section}</p>
             <div className="overflow-hidden rounded-2xl border border-border bg-card divide-y divide-border">
-              {section.rows.map(({ Icon, label, value }) => (
-                <button key={label} className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/30">
+              {section.rows.map(({ Icon, label, value, action, view }) => (
+                <button key={label} onClick={() => view ? setView(view) : action?.()} className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/30">
                   <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                   <span className="flex-1 text-[13px] font-bold text-foreground">{label}</span>
                   {value && <span className="text-xs text-muted-foreground">{value}</span>}
-                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                  {(view || action) && <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />}
                 </button>
               ))}
             </div>
@@ -1398,6 +1627,7 @@ export default function App() {
   const [editRecord, setEditRecord] = useState<EditableRecord>(null);
   const [savingRecord, setSavingRecord] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem("keystone-browser-notifications") === "true");
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(() => localStorage.getItem("home-harbor-analytics-enabled") !== "false");
   const [lastNotificationKey, setLastNotificationKey] = useState("");
 
   const serializedData = JSON.stringify(data);
@@ -1495,9 +1725,19 @@ export default function App() {
     setLastNotificationKey(key);
   }, [notificationsEnabled, reminders, lastNotificationKey]);
 
+  function track(eventName: string, metadata: Record<string, unknown> = {}) {
+    if (!analyticsEnabled) return;
+    void recordAnalyticsEvent(session?.user.id, eventName, metadata).catch(() => {});
+  }
+
+  useEffect(() => {
+    if (session?.user.id && onboarded) track("app_opened", { tab });
+  }, [session?.user.id, onboarded]);
+
   function navigate(next: Tab) {
     setTab(next);
     if (next !== "properties") setSelectedProperty(null);
+    track("section_opened", { section: next });
   }
 
   function openAdd(kind: Exclude<ModalKind, null>) {
@@ -1574,6 +1814,7 @@ export default function App() {
       };
       return { ...current, docs: previous ? current.docs.map((doc) => doc.id === previous.id ? nextDoc : doc) : [...current.docs, nextDoc] };
       });
+      track(editing ? "record_updated" : "record_created", { kind });
       closeModal();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Save failed.");
@@ -1602,6 +1843,7 @@ export default function App() {
       if (kind === "task") return { ...current, tasks: current.tasks.filter((task) => task.id !== id) };
       return { ...current, docs: current.docs.filter((doc) => doc.id !== id) };
     });
+    track("record_deleted", { kind });
 
     if (kind === "property" && selectedProperty === id) {
       setSelectedProperty(null);
@@ -1651,6 +1893,7 @@ export default function App() {
     setOnboarded(true);
     setTab("dashboard");
     setSelectedProperty(null);
+    track("onboarding_completed", { mode: setup.mode });
   }
 
   function replayOnboarding() {
@@ -1667,6 +1910,7 @@ export default function App() {
     if (notificationsEnabled) {
       localStorage.removeItem("keystone-browser-notifications");
       setNotificationsEnabled(false);
+      track("notifications_disabled");
       return;
     }
 
@@ -1677,6 +1921,7 @@ export default function App() {
       new Notification("Home Harbor reminders enabled", {
         body: "You will be notified when urgent rental items need attention.",
       });
+      track("notifications_enabled");
     } else {
       window.alert("Notifications were not enabled. You can allow them later in browser settings.");
     }
@@ -1696,6 +1941,7 @@ export default function App() {
     link.download = "keystone-rental-data.json";
     link.click();
     URL.revokeObjectURL(url);
+    track("data_exported", { properties: data.properties.length, tenants: data.tenants.length });
   }
 
   function renderContent() {
@@ -1725,7 +1971,7 @@ export default function App() {
     }
     if (tab === "tasks") return <Tasks data={data} onAdd={() => openAdd("task")} onEdit={(task) => openEdit({ kind: "task", item: task })} onDelete={(id) => deleteRecord("task", id)} toggleTask={toggleTask} />;
     if (tab === "documents") return <Documents data={data} onAdd={() => openAdd("document")} onEdit={(doc) => openEdit({ kind: "document", item: doc })} onDelete={(id) => deleteRecord("document", id)} />;
-    return <SettingsScreen data={data} profile={profile} notificationsEnabled={notificationsEnabled} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} onToggleNotifications={toggleNotifications} onSignOut={signOut} />;
+    return <SettingsScreen data={data} profile={profile} userId={session.user.id} activeTab={tab} notificationsEnabled={notificationsEnabled} analyticsEnabled={analyticsEnabled} setAnalyticsEnabled={setAnalyticsEnabled} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} onToggleNotifications={toggleNotifications} onSignOut={signOut} onTrack={track} />;
   }
 
   if (!supabase) {
