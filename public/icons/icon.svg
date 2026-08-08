@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Home Harbor">
+  <rect width="512" height="512" rx="112" fill="#1A3352"/>
+  <path d="M126 245.5 256 140l130 105.5" fill="none" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M159 230v142h194V230" fill="none" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M217 372v-88h78v88" fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M166 410c32 21 63 21 95 0 32-21 63-21 95 0" fill="none" stroke="#0D9488" stroke-width="24" stroke-linecap="round"/>
+</svg>

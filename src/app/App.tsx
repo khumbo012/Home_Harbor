@@ -483,7 +483,7 @@ const NAV_ITEMS = [
 
 function BottomNav({ active, onChange, badge }: { active: Tab; onChange: (tab: Tab) => void; badge: number }) {
   return (
-    <nav className="border-t border-border bg-card lg:hidden">
+    <nav className="border-t border-border bg-card pb-[calc(env(safe-area-inset-bottom)+0.25rem)] lg:hidden">
       <div className="flex">
         {NAV_ITEMS.map(({ id, label, Icon }) => {
           const activeItem = active === id;
@@ -1143,6 +1143,42 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}</pre>
   );
 }
 
+function InstallHint() {
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem("home-harbor-install-hint-dismissed") === "true");
+  const [showHint, setShowHint] = useState(false);
+
+  useEffect(() => {
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches ||
+      ("standalone" in window.navigator && (window.navigator as Navigator & { standalone?: boolean }).standalone);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    setShowHint(isIOS && !isStandalone && !dismissed);
+  }, [dismissed]);
+
+  if (!showHint) return null;
+
+  function dismiss() {
+    localStorage.setItem("home-harbor-install-hint-dismissed", "true");
+    setDismissed(true);
+  }
+
+  return (
+    <div className="mx-4 mt-3 rounded-2xl border border-[#1A3352]/15 bg-card p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#EAF8F6]">
+          <Upload className="h-4 w-4 text-[#0D9488]" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-foreground">Install on your iPhone</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">In Safari, tap Share, then Add to Home Screen for an app-like Home Harbor icon.</p>
+        </div>
+        <button onClick={dismiss} className="-mr-1 -mt-1 rounded-lg p-1.5 text-muted-foreground hover:bg-muted" aria-label="Dismiss install hint">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AuthScreen() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -1729,13 +1765,14 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-[100dvh] overflow-hidden bg-background pt-[env(safe-area-inset-top)]">
       <Sidebar active={tab} onChange={navigate} badge={badge} profile={profile} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <main className="flex-1 overflow-y-auto">
           <div className="border-b border-border bg-card px-4 py-2 text-center text-[11px] font-bold text-muted-foreground lg:text-left">
             {cloudStatus}
           </div>
+          <InstallHint />
           {renderContent()}
         </main>
         <BottomNav active={tab} onChange={navigate} badge={badge} />

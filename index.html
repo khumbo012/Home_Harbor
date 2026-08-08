@@ -1,22 +1,30 @@
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Mobile Rental Management App</title>
-      <meta name="description" content="Effortlessly manage up to 20 rental units with a clean dashboard that tracks tenants, maintenance, and tasks, designed for self-managing landlords." />
-      <meta name="robots" content="noindex, nofollow" />
-      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
-      
-    </head>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Home Harbor</title>
+    <meta name="description" content="Manage rentals, tenants, maintenance, documents, and reminders from a clean mobile-first workspace." />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#1A3352" />
+    <meta name="color-scheme" content="light" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Home Harbor" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <style>
+      html, body { height: 100%; margin: 0; overscroll-behavior-y: none; }
+      body { background: #F4F5F8; }
+      #root { min-height: 100%; height: 100%; }
+    </style>
+  </head>
 
-    <body>
-      
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-      
-    </body>
-  </html>
-  
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
