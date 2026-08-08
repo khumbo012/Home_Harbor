@@ -2,6 +2,17 @@
 
 :root {
   --font-size: 16px;
+  --hh-space-1: 0.5rem;
+  --hh-space-2: 1rem;
+  --hh-space-3: 1.5rem;
+  --hh-space-4: 2rem;
+  --hh-radius-sm: 0.5rem;
+  --hh-radius-md: 0.75rem;
+  --hh-radius-lg: 1rem;
+  --hh-radius-xl: 1.5rem;
+  --hh-shadow-sm: 0 1px 2px rgba(13, 20, 34, 0.05);
+  --hh-shadow-md: 0 12px 28px rgba(13, 20, 34, 0.08);
+  --hh-transition-fast: 160ms ease;
   --background: #F4F5F8;
   --foreground: #0D1422;
   --card: #FFFFFF;
@@ -25,6 +36,17 @@
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --ring: #1A3352;
+  --hh-primary: #1A3352;
+  --hh-primary-hover: #162B44;
+  --hh-success: #0D9488;
+  --hh-success-bg: #EAF8F6;
+  --hh-warning: #B45309;
+  --hh-warning-bg: #FEF3C7;
+  --hh-urgent: #B91C1C;
+  --hh-urgent-bg: #FEF2F2;
+  --hh-surface: #FFFFFF;
+  --hh-surface-muted: #F8FAFC;
+  --hh-focus: 0 0 0 3px rgba(26, 51, 82, 0.18);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -173,5 +195,22 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition-duration: var(--hh-transition-fast);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+    box-shadow: var(--hh-focus);
   }
 }

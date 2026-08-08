@@ -488,6 +488,26 @@ function Chip({ children, className = "" }: { children: React.ReactNode; classNa
   return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold ${className}`}>{children}</span>;
 }
 
+function Button({ children, onClick, type = "button", variant = "primary", disabled = false, className = "" }: { children: React.ReactNode; onClick?: () => void; type?: "button" | "submit"; variant?: "primary" | "secondary" | "ghost" | "danger"; disabled?: boolean; className?: string }) {
+  const variants = {
+    primary: "border-[var(--hh-primary)] bg-[var(--hh-primary)] text-white hover:bg-[var(--hh-primary-hover)]",
+    secondary: "border-border bg-card text-[var(--hh-primary)] hover:border-[var(--hh-primary)]/25 hover:bg-[var(--hh-surface-muted)]",
+    ghost: "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
+    danger: "border-red-100 bg-red-50 text-red-700 hover:bg-red-100",
+  };
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function PageHeader({ title, subtitle, action, onBack }: { title: string; subtitle?: string; action?: React.ReactNode; onBack?: () => void }) {
   return (
     <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-sm">
@@ -509,7 +529,7 @@ function PageHeader({ title, subtitle, action, onBack }: { title: string; subtit
 
 function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-[#1A3352] px-3 py-1.5 text-xs font-black text-white transition-all hover:bg-[#162B44] active:scale-95">
+    <button onClick={onClick} className="flex min-h-9 flex-shrink-0 items-center gap-1.5 rounded-lg bg-[var(--hh-primary)] px-3 py-1.5 text-xs font-black text-white transition-all hover:bg-[var(--hh-primary-hover)] active:scale-95">
       <Plus className="h-3.5 w-3.5" />
       {label}
     </button>
@@ -546,6 +566,23 @@ function SearchInput({ value, onChange, placeholder }: { value: string; onChange
   );
 }
 
+function Input({ name, value, defaultValue, onChange, type = "text", required, minLength, min, placeholder, className = "" }: { name?: string; value?: string | number; defaultValue?: string | number; onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void; type?: string; required?: boolean; minLength?: number; min?: string | number; placeholder?: string; className?: string }) {
+  return (
+    <input
+      name={name}
+      value={value}
+      defaultValue={defaultValue}
+      onChange={onChange}
+      type={type}
+      required={required}
+      minLength={minLength}
+      min={min}
+      placeholder={placeholder}
+      className={`w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--hh-primary)]/40 focus:ring-2 focus:ring-[var(--hh-primary)]/20 ${className}`}
+    />
+  );
+}
+
 function EmptyState({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle?: string }) {
   return (
     <div className="py-14 text-center">
@@ -554,6 +591,25 @@ function EmptyState({ icon: Icon, title, subtitle }: { icon: React.ElementType; 
       {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
     </div>
   );
+}
+
+function SkeletonLoader({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-2 px-4 py-4" aria-label="Loading">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className="h-20 animate-pulse rounded-2xl border border-border bg-card p-4">
+          <div className="h-3 w-1/3 rounded-full bg-muted" />
+          <div className="mt-3 h-3 w-3/4 rounded-full bg-muted" />
+          <div className="mt-3 h-2 w-1/2 rounded-full bg-muted" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const label = status === "in-progress" ? "In Progress" : status === "done" ? "Complete" : status === "expiring" ? "Expiring Soon" : status.charAt(0).toUpperCase() + status.slice(1);
+  return <Chip className={statusStyle(status)}>{label}</Chip>;
 }
 
 function PriorityBadge({ priority }: { priority: "low" | "medium" | "high" }) {
@@ -665,6 +721,63 @@ function DocumentCard({ data, doc, onOpen, onEdit, onDelete }: { data: AppData; 
   );
 }
 
+function PropertyCard({ property, data, onSelect, onEdit, onDelete }: { property: Property; data: AppData; onSelect: (id: string) => void; onEdit: (property: Property) => void; onDelete: (id: string) => void }) {
+  const stats = propertyStats(data, property.id);
+  const openIssues = data.maintenance.filter((m) => m.propertyId === property.id && m.status !== "resolved").length;
+  const occupiedTone = stats.occupiedUnits === property.units ? "bg-teal-500" : "bg-amber-500";
+
+  return (
+    <div className="group overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--hh-shadow-sm)] transition-all hover:border-[var(--hh-primary)]/20 hover:shadow-[var(--hh-shadow-md)]">
+      <button onClick={() => onSelect(property.id)} className="w-full text-left active:scale-[0.99]">
+        <div className="relative h-44 bg-slate-200">
+          <img src={property.imageUrl || DEFAULT_IMAGES[0]} alt={property.name} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+          {openIssues > 0 && <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-red-600 px-2 py-1 text-[10px] font-black text-white"><Wrench className="h-2.5 w-2.5" />{openIssues} open</div>}
+          <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[15px] font-black leading-tight text-white drop-shadow-sm">{property.name}</p>
+              <div className="mt-0.5 flex items-center gap-1"><MapPin className="h-3 w-3 flex-shrink-0 text-white/75" /><p className="truncate text-xs text-white/80">{property.address}</p></div>
+            </div>
+            <span className={`flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-black text-white ${occupiedTone}`}>{stats.occupiedUnits}/{property.units}</span>
+          </div>
+        </div>
+      </button>
+      <div className="grid grid-cols-3 gap-2 px-4 pt-4">
+        {[{ label: "Units", value: property.units }, { label: "Tenants", value: stats.tenants.length }, { label: "Monthly", value: money(stats.revenue) }].map((item) => (
+          <div key={item.label} className="rounded-xl bg-background py-2.5 text-center">
+            <p className="text-[15px] font-black tracking-[-0.03em] text-foreground">{item.value}</p>
+            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <Button variant="ghost" onClick={() => onSelect(property.id)} className="min-h-8 px-2 py-1 text-xs">Open</Button>
+        <div className="flex gap-2">
+          <IconAction label="Edit property" icon={Pencil} onClick={() => onEdit(property)} />
+          <IconAction label="Delete property" icon={Trash2} tone="danger" onClick={() => onDelete(property.id)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SearchAndFilterBar<T extends string>({ query, onQueryChange, placeholder, filters, activeFilter, onFilterChange }: { query?: string; onQueryChange?: (value: string) => void; placeholder?: string; filters?: readonly T[]; activeFilter?: T; onFilterChange?: (value: T) => void }) {
+  return (
+    <div className="space-y-3 px-4 py-3">
+      {query !== undefined && onQueryChange && <SearchInput value={query} onChange={onQueryChange} placeholder={placeholder || "Search..."} />}
+      {filters && activeFilter && onFilterChange && (
+        <div className="flex gap-2 overflow-x-auto pb-0.5">
+          {filters.map((item) => (
+            <button key={item} onClick={() => onFilterChange(item)} className={`min-h-9 flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-black capitalize transition-all active:scale-[0.98] ${activeFilter === item ? "bg-[var(--hh-primary)] text-white" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}>
+              {item === "all" ? "All" : item}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfirmationToast({ notice }: { notice: { message: string; tone: "success" | "error" } | null }) {
   if (!notice) return null;
   const error = notice.tone === "error";
@@ -691,7 +804,7 @@ const NAV_ITEMS = [
   { id: "settings" as Tab, label: "Settings", Icon: Settings },
 ];
 
-function BottomNav({ active, onChange, badge }: { active: Tab; onChange: (tab: Tab) => void; badge: number }) {
+function MobileNav({ active, onChange, badge }: { active: Tab; onChange: (tab: Tab) => void; badge: number }) {
   return (
     <nav className="border-t border-border bg-card pb-[calc(env(safe-area-inset-bottom)+0.25rem)] lg:hidden">
       <div className="flex">
@@ -742,6 +855,26 @@ function Sidebar({ active, onChange, badge, profile }: { active: Tab; onChange: 
         </div>
       </div>
     </aside>
+  );
+}
+
+function AppShell({ active, onChange, badge, profile, cloudStatus, children, modal, data, selectedProperty, editRecord, saving, closeModal, save, notice }: { active: Tab; onChange: (tab: Tab) => void; badge: number; profile: AppProfile; cloudStatus: string; children: React.ReactNode; modal: ModalKind; data: AppData; selectedProperty: string | null; editRecord: EditableRecord; saving: boolean; closeModal: () => void; save: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editRecord: EditableRecord) => Promise<void>; notice: { message: string; tone: "success" | "error" } | null }) {
+  return (
+    <div className="flex h-[100dvh] overflow-hidden bg-background pt-[env(safe-area-inset-top)]">
+      <Sidebar active={active} onChange={onChange} badge={badge} profile={profile} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <main className="flex-1 overflow-y-auto">
+          <div className="border-b border-border bg-card px-4 py-2 text-center text-[11px] font-bold text-muted-foreground lg:text-left">
+            {cloudStatus}
+          </div>
+          <InstallHint />
+          {children}
+        </main>
+        <MobileNav active={active} onChange={onChange} badge={badge} />
+      </div>
+      <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={saving} onClose={closeModal} onSave={save} />
+      <ConfirmationToast notice={notice} />
+    </div>
   );
 }
 
@@ -847,7 +980,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                     <p className="text-sm font-black leading-tight text-foreground">{item.title}</p>
                     <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, item.propertyId)} - {item.unit} - {item.tenantName}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <Chip className={statusStyle(item.status)}>{item.status === "in-progress" ? "In progress" : "Open"}</Chip>
+                      <StatusBadge status={item.status} />
                       <Chip className={priorityStyle(item.priority)}>High</Chip>
                     </div>
                   </div>
@@ -862,7 +995,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black leading-tight text-foreground">Lease expiring - {tenant.name}</p>
                     <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, tenant.propertyId)} - {tenant.unit} - ends {tenant.leaseEnd}</p>
-                    <div className="mt-2"><Chip className={statusStyle(tenant.status)}>{tenant.status === "expired" ? "Expired" : "Expiring soon"}</Chip></div>
+                    <div className="mt-2"><StatusBadge status={tenant.status} /></div>
                   </div>
                   <button onClick={() => onNav("tasks")} className="mt-0.5 flex-shrink-0 text-xs font-black text-[#1A3352] hover:opacity-60">Renew</button>
                 </div>
@@ -938,45 +1071,9 @@ function PropertiesList({ data, onSelect, onAdd, onEdit, onDelete }: { data: App
   return (
     <div className="pb-24 lg:pb-10">
       <PageHeader title="Properties" subtitle={`${data.properties.length} active properties`} action={<AddButton label="Add" onClick={onAdd} />} />
-      <div className="px-4 py-3"><SearchInput value={query} onChange={setQuery} placeholder="Search by name or address..." /></div>
+      <SearchAndFilterBar query={query} onQueryChange={setQuery} placeholder="Search by name or address..." />
       <div className="space-y-4 px-4">
-        {filtered.map((property) => {
-          const stats = propertyStats(data, property.id);
-          const openIssues = data.maintenance.filter((m) => m.propertyId === property.id && m.status !== "resolved").length;
-          return (
-            <div key={property.id} className="group overflow-hidden rounded-2xl border border-border bg-card transition-all duration-200 hover:border-[#1A3352]/20 hover:shadow-lg">
-              <button onClick={() => onSelect(property.id)} className="w-full text-left active:scale-[0.99]">
-                <div className="relative h-44 bg-slate-200">
-                <img src={property.imageUrl || DEFAULT_IMAGES[0]} alt={property.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-                {openIssues > 0 && <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-red-500 px-2 py-1 text-[10px] font-black text-white"><Wrench className="h-2.5 w-2.5" />{openIssues} open</div>}
-                <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[15px] font-black leading-tight text-white drop-shadow-sm">{property.name}</p>
-                    <div className="mt-0.5 flex items-center gap-1"><MapPin className="h-3 w-3 flex-shrink-0 text-white/75" /><p className="truncate text-xs text-white/80">{property.address}</p></div>
-                  </div>
-                  <span className={`flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-black text-white ${stats.occupiedUnits === property.units ? "bg-teal-500" : "bg-amber-500"}`}>{stats.occupiedUnits}/{property.units}</span>
-                </div>
-              </div>
-              </button>
-              <div className="grid grid-cols-3 gap-2 px-4 pt-4">
-                {[{ label: "Units", value: property.units }, { label: "Tenants", value: stats.tenants.length }, { label: "Monthly", value: money(stats.revenue) }].map((item) => (
-                  <div key={item.label} className="rounded-xl bg-background py-2.5 text-center">
-                    <p className="text-[15px] font-black tracking-[-0.03em] text-foreground">{item.value}</p>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.label}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center justify-between gap-2 px-4 py-3">
-                <button onClick={() => onSelect(property.id)} className="text-xs font-black text-[#1A3352]">Open</button>
-                <div className="flex gap-2">
-                  <IconAction label="Edit property" icon={Pencil} onClick={() => onEdit(property)} />
-                  <IconAction label="Delete property" icon={Trash2} tone="danger" onClick={() => onDelete(property.id)} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {filtered.map((property) => <PropertyCard key={property.id} property={property} data={data} onSelect={onSelect} onEdit={onEdit} onDelete={onDelete} />)}
         {filtered.length === 0 && <EmptyState icon={Building2} title="No properties found" subtitle="Try a different search or add a new property." />}
       </div>
     </div>
@@ -1060,7 +1157,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
                 <div className="mb-2.5 flex items-start justify-between gap-3">
                   <div className="min-w-0"><p className="text-sm font-black leading-tight text-foreground">{tenant.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{tenant.unit} - {money(tenant.rent)}/mo</p></div>
                   <div className="flex flex-shrink-0 items-center gap-2">
-                    <Chip className={statusStyle(tenant.status)}>{tenant.status === "expiring" ? "Expiring" : tenant.status}</Chip>
+                    <StatusBadge status={tenant.status} />
                     <IconAction label="Edit tenant" icon={Pencil} onClick={() => onEditTenant(tenant)} />
                     <IconAction label="Delete tenant" icon={Trash2} tone="danger" onClick={() => onDeleteTenant(tenant.id)} />
                   </div>
@@ -1091,7 +1188,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <p className="flex-1 text-sm font-black leading-tight text-foreground">{item.title}</p>
                   <div className="flex flex-shrink-0 items-center gap-2">
-                    <Chip className={statusStyle(item.status)}>{item.status === "in-progress" ? "In progress" : item.status}</Chip>
+                    <StatusBadge status={item.status} />
                     <IconAction label="Edit maintenance" icon={Pencil} onClick={() => onEditMaintenance(item)} />
                     <IconAction label="Delete maintenance" icon={Trash2} tone="danger" onClick={() => onDeleteMaintenance(item.id)} />
                   </div>
@@ -1145,9 +1242,7 @@ function Tasks({ data, onAdd, onEdit, onDelete, toggleTask }: { data: AppData; o
           <p className="mt-1 text-sm leading-6 text-muted-foreground">Sorted by due date so renewals, inspections, and follow-ups surface before lower-pressure work.</p>
         </div>
       </div>
-      <div className="flex gap-2 overflow-x-auto px-4 py-3">
-        {(["all", "high", "medium", "low", "done"] as const).map((item) => <button key={item} onClick={() => setFilter(item)} className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-black capitalize transition-all ${filter === item ? "bg-[#1A3352] text-white" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}>{item}</button>)}
-      </div>
+      <SearchAndFilterBar filters={["all", "high", "medium", "low", "done"] as const} activeFilter={filter} onFilterChange={setFilter} />
       <div className="space-y-2 px-4">
         {visible.length === 0 ? <EmptyState icon={CheckCircle2} title="Nothing here" subtitle="Try a different filter or add a task." /> : visible.map((task) => (
           <TaskCard key={task.id} data={data} task={task} onToggle={toggleTask} onEdit={onEdit} onDelete={onDelete} />
@@ -1168,12 +1263,7 @@ function Documents({ data, onAdd, onOpen, onEdit, onDelete }: { data: AppData; o
   return (
     <div className="mx-auto w-full max-w-5xl pb-24 lg:pb-10">
       <PageHeader title="Documents" subtitle={`${data.docs.length} files`} action={<AddButton label="Upload" onClick={onAdd} />} />
-      <div className="px-4 pb-2 pt-3">
-        <div className="mb-3"><SearchInput value={query} onChange={setQuery} placeholder="Search documents..." /></div>
-        <div className="flex gap-2 overflow-x-auto pb-0.5">
-          {(["all", "lease", "inspection", "warranty", "receipt", "application", "other"] as const).map((item) => <button key={item} onClick={() => setType(item)} className={`flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-black capitalize transition-all ${type === item ? "bg-[#1A3352] text-white" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}>{item === "all" ? "All" : item}</button>)}
-        </div>
-      </div>
+      <SearchAndFilterBar query={query} onQueryChange={setQuery} placeholder="Search documents..." filters={["all", "lease", "inspection", "warranty", "receipt", "application", "other"] as const} activeFilter={type} onFilterChange={setType} />
       <div className="space-y-2 px-4">
         {filtered.length === 0 ? <EmptyState icon={FileText} title="No documents found" /> : filtered.map((doc) => (
           <DocumentCard key={doc.id} data={data} doc={doc} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} />
@@ -1267,9 +1357,9 @@ function FeedbackScreen({ profile, userId, currentPage, onBack, onTrack }: { pro
             </Field>
           </div>
           {status && <p className="mt-3 rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">{status}</p>}
-          <button disabled={busy || message.trim().length < 4} className="mt-4 w-full rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white disabled:opacity-50">
+          <Button type="submit" disabled={busy || message.trim().length < 4} className="mt-4 w-full">
             {busy ? "Sending..." : "Send feedback"}
-          </button>
+          </Button>
         </form>
       </div>
     </div>
@@ -1311,9 +1401,9 @@ function AnalyticsScreen({ userId, analyticsEnabled, setAnalyticsEnabled, onBack
           <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF8F6]"><BarChart3 className="h-5 w-5 text-[#0D9488]" /></div>
           <p className="text-lg font-black tracking-[-0.03em] text-foreground">Privacy-friendly product analytics.</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Home Harbor records simple events like page opens, creates, updates, deletes, and feedback submissions to your own Supabase project.</p>
-          <button onClick={toggleAnalytics} className={`mt-4 w-full rounded-xl px-4 py-3 text-sm font-black ${analyticsEnabled ? "bg-[#1A3352] text-white" : "border border-border bg-card text-muted-foreground"}`}>
+          <Button onClick={toggleAnalytics} variant={analyticsEnabled ? "primary" : "secondary"} className="mt-4 w-full">
             Analytics {analyticsEnabled ? "on" : "off"}
-          </button>
+          </Button>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="text-sm font-black text-foreground">Recent activity</p>
@@ -1376,8 +1466,8 @@ function SettingsScreen({ data, profile, userId, activeTab, notificationsEnabled
           </div>
         ))}
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={exportData} className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-[#1A3352]"><Download className="h-4 w-4" />Export</button>
-          <button onClick={resetData} className="flex items-center justify-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-black text-red-700"><RefreshCcw className="h-4 w-4" />Reset demo</button>
+          <Button variant="secondary" onClick={exportData} className="text-xs"><Download className="h-4 w-4" />Export</Button>
+          <Button variant="danger" onClick={resetData} className="text-xs"><RefreshCcw className="h-4 w-4" />Reset demo</Button>
         </div>
         <button onClick={onToggleNotifications} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-muted-foreground">
           <Bell className="h-4 w-4" />
@@ -1401,7 +1491,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="mb-1.5 block text-xs font-black uppercase tracking-wider text-muted-foreground">{label}</span>{children}</label>;
 }
 
-const inputClass = "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#1A3352]/40 focus:ring-2 focus:ring-[#1A3352]/20";
+const inputClass = "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-[var(--hh-primary)]/40 focus:ring-2 focus:ring-[var(--hh-primary)]/20";
 
 function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, onSave }: { kind: ModalKind; data: AppData; selectedProperty: string | null; editRecord: EditableRecord; saving: boolean; onClose: () => void; onSave: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editRecord: EditableRecord) => Promise<void> }) {
   if (!kind) return null;
@@ -1416,8 +1506,8 @@ function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, o
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-0 sm:items-center sm:justify-center sm:p-4">
-      <form onSubmit={submit} className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card p-4 shadow-2xl sm:max-w-lg sm:rounded-2xl">
+    <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-0 sm:items-center sm:justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
+      <form onSubmit={submit} className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border border-border bg-card p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl sm:max-w-lg sm:rounded-2xl sm:pb-4">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div><p className="text-lg font-black tracking-[-0.03em] text-foreground">{title}</p><p className="text-xs text-muted-foreground">Saved to your cloud portfolio automatically.</p></div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-muted" aria-label="Close"><X className="h-4 w-4" /></button>
@@ -1485,8 +1575,8 @@ function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, o
         </div>
 
         <div className="mt-5 flex gap-2">
-          <button type="button" onClick={onClose} disabled={saving} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-black text-muted-foreground disabled:opacity-50">Cancel</button>
-          <button type="submit" disabled={saving} className="flex-1 rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? "Saving..." : editing ? "Save changes" : "Save"}</button>
+          <Button variant="secondary" onClick={onClose} disabled={saving} className="flex-1">Cancel</Button>
+          <Button type="submit" disabled={saving} className="flex-1">{saving ? "Saving..." : editing ? "Save changes" : "Save"}</Button>
         </div>
       </form>
     </div>
@@ -1631,9 +1721,9 @@ function AuthScreen() {
         <Field label="Email"><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required className={inputClass} placeholder="you@email.com" /></Field>
         <Field label="Password"><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required minLength={6} className={inputClass} placeholder="At least 6 characters" /></Field>
         {message && <p className="rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">{message}</p>}
-        <button disabled={busy} className="w-full rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white transition-all disabled:opacity-50">
+        <Button type="submit" disabled={busy} className="w-full">
           {busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
-        </button>
+        </Button>
       </form>
       <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="mt-4 w-full text-center text-xs font-black text-[#1A3352]">
         {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
@@ -2214,10 +2304,11 @@ export default function App() {
   if (cloudLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
           <Shield className="mx-auto mb-3 h-8 w-8 text-[#0D9488]" />
           <p className="text-sm font-black text-foreground">Loading your portfolio...</p>
           <p className="mt-1 text-xs text-muted-foreground">{cloudStatus}</p>
+          <SkeletonLoader rows={2} />
         </div>
       </div>
     );
@@ -2228,20 +2319,22 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-background pt-[env(safe-area-inset-top)]">
-      <Sidebar active={tab} onChange={navigate} badge={badge} profile={profile} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto">
-          <div className="border-b border-border bg-card px-4 py-2 text-center text-[11px] font-bold text-muted-foreground lg:text-left">
-            {cloudStatus}
-          </div>
-          <InstallHint />
-          {renderContent()}
-        </main>
-        <BottomNav active={tab} onChange={navigate} badge={badge} />
-      </div>
-      <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={savingRecord} onClose={closeModal} onSave={save} />
-      <ConfirmationToast notice={notice} />
-    </div>
+    <AppShell
+      active={tab}
+      onChange={navigate}
+      badge={badge}
+      profile={profile}
+      cloudStatus={cloudStatus}
+      modal={modal}
+      data={data}
+      selectedProperty={selectedProperty}
+      editRecord={editRecord}
+      saving={savingRecord}
+      closeModal={closeModal}
+      save={save}
+      notice={notice}
+    >
+      {renderContent()}
+    </AppShell>
   );
 }
