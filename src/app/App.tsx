@@ -295,10 +295,7 @@ async function openDocumentFile(filePath: string) {
   if (!supabase) return;
 
   const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-  if (error) {
-    window.alert(error.message);
-    return;
-  }
+  if (error) throw error;
 
   window.open(data.signedUrl, "_blank", "noopener,noreferrer");
 }
@@ -647,7 +644,7 @@ function TaskCard({ data, task, onToggle, onEdit, onDelete, compact = false }: {
   );
 }
 
-function DocumentCard({ data, doc, onEdit, onDelete }: { data: AppData; doc: DocItem; onEdit: (doc: DocItem) => void; onDelete: (id: string) => void }) {
+function DocumentCard({ data, doc, onOpen, onEdit, onDelete }: { data: AppData; doc: DocItem; onOpen: (filePath: string) => void; onEdit: (doc: DocItem) => void; onDelete: (id: string) => void }) {
   return (
     <div className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/20 hover:shadow-sm">
       <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
@@ -660,7 +657,7 @@ function DocumentCard({ data, doc, onEdit, onDelete }: { data: AppData; doc: Doc
         <p className="mt-0.5 truncate text-xs text-muted-foreground">{propertyName(data, doc.propertyId)}{doc.tenantName ? ` - ${doc.tenantName}` : ""} - {doc.date} - {doc.size}</p>
       </div>
       <div className="flex flex-shrink-0 gap-2">
-        {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => openDocumentFile(doc.filePath!)} />}
+        {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => onOpen(doc.filePath!)} />}
         <IconAction label="Edit document" icon={Pencil} onClick={() => onEdit(doc)} />
         <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDelete(doc.id)} />
       </div>
@@ -668,13 +665,14 @@ function DocumentCard({ data, doc, onEdit, onDelete }: { data: AppData; doc: Doc
   );
 }
 
-function ConfirmationToast({ message }: { message: string }) {
-  if (!message) return null;
+function ConfirmationToast({ notice }: { notice: { message: string; tone: "success" | "error" } | null }) {
+  if (!notice) return null;
+  const error = notice.tone === "error";
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[60] flex justify-center px-4 lg:bottom-6">
-      <div className="flex max-w-sm items-center gap-2 rounded-2xl border border-teal-100 bg-white px-4 py-3 text-sm font-black text-foreground shadow-xl">
-        <CheckCircle2 className="h-4 w-4 text-[#0D9488]" />
-        <span>{message}</span>
+      <div className={`flex max-w-sm items-center gap-2 rounded-2xl border bg-white px-4 py-3 text-sm font-black text-foreground shadow-xl ${error ? "border-red-100" : "border-teal-100"}`}>
+        {error ? <AlertTriangle className="h-4 w-4 text-red-600" /> : <CheckCircle2 className="h-4 w-4 text-[#0D9488]" />}
+        <span>{notice.message}</span>
       </div>
     </div>
   );
@@ -985,7 +983,7 @@ function PropertiesList({ data, onSelect, onAdd, onEdit, onDelete }: { data: App
   );
 }
 
-function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenance, onAddDocument, onEditProperty, onDeleteProperty, onEditTenant, onDeleteTenant, onEditMaintenance, onDeleteMaintenance, onEditDocument, onDeleteDocument, updateMaintenance }: {
+function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenance, onAddDocument, onEditProperty, onDeleteProperty, onEditTenant, onDeleteTenant, onEditMaintenance, onDeleteMaintenance, onOpenDocument, onEditDocument, onDeleteDocument, updateMaintenance }: {
   data: AppData;
   propertyId: string;
   onBack: () => void;
@@ -998,6 +996,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
   onDeleteTenant: (id: string) => void;
   onEditMaintenance: (item: MaintenanceItem) => void;
   onDeleteMaintenance: (id: string) => void;
+  onOpenDocument: (filePath: string) => void;
   onEditDocument: (doc: DocItem) => void;
   onDeleteDocument: (id: string) => void;
   updateMaintenance: (id: string, status: MaintenanceItem["status"]) => void;
@@ -1116,7 +1115,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-foreground">{doc.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{doc.date} - {doc.size}{doc.fileName ? ` - ${doc.fileName}` : ""}</p></div>
                 <div className="flex flex-shrink-0 gap-2">
-                  {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => openDocumentFile(doc.filePath!)} />}
+                  {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => onOpenDocument(doc.filePath!)} />}
                   <IconAction label="Edit document" icon={Pencil} onClick={() => onEditDocument(doc)} />
                   <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDeleteDocument(doc.id)} />
                 </div>
@@ -1158,7 +1157,7 @@ function Tasks({ data, onAdd, onEdit, onDelete, toggleTask }: { data: AppData; o
   );
 }
 
-function Documents({ data, onAdd, onEdit, onDelete }: { data: AppData; onAdd: () => void; onEdit: (doc: DocItem) => void; onDelete: (id: string) => void }) {
+function Documents({ data, onAdd, onOpen, onEdit, onDelete }: { data: AppData; onAdd: () => void; onOpen: (filePath: string) => void; onEdit: (doc: DocItem) => void; onDelete: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState<DocItem["type"] | "all">("all");
   const filtered = data.docs.filter((doc) => {
@@ -1177,7 +1176,7 @@ function Documents({ data, onAdd, onEdit, onDelete }: { data: AppData; onAdd: ()
       </div>
       <div className="space-y-2 px-4">
         {filtered.length === 0 ? <EmptyState icon={FileText} title="No documents found" /> : filtered.map((doc) => (
-          <DocumentCard key={doc.id} data={data} doc={doc} onEdit={onEdit} onDelete={onDelete} />
+          <DocumentCard key={doc.id} data={data} doc={doc} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} />
         ))}
       </div>
     </div>
@@ -1817,7 +1816,7 @@ export default function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem("keystone-browser-notifications") === "true");
   const [analyticsEnabled, setAnalyticsEnabled] = useState(() => localStorage.getItem("home-harbor-analytics-enabled") !== "false");
   const [lastNotificationKey, setLastNotificationKey] = useState("");
-  const [toast, setToast] = useState("");
+  const [notice, setNotice] = useState<{ message: string; tone: "success" | "error" } | null>(null);
 
   const serializedData = JSON.stringify(data);
   const serializedProfile = JSON.stringify(profile);
@@ -1919,9 +1918,9 @@ export default function App() {
     void recordAnalyticsEvent(session?.user.id, eventName, metadata).catch(() => {});
   }
 
-  function showToast(message: string) {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2600);
+  function showToast(message: string, tone: "success" | "error" = "success") {
+    setNotice({ message, tone });
+    window.setTimeout(() => setNotice(null), tone === "error" ? 4200 : 2600);
   }
 
   useEffect(() => {
@@ -2018,7 +2017,7 @@ export default function App() {
       showToast(editing ? "Changes saved." : "Added successfully.");
       closeModal();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Save failed.");
+      showToast(error instanceof Error ? error.message : "Save failed.", "error");
     } finally {
       setSavingRecord(false);
     }
@@ -2108,7 +2107,7 @@ export default function App() {
 
   async function toggleNotifications() {
     if (typeof Notification === "undefined") {
-      window.alert("Browser notifications are not supported here.");
+      showToast("Browser notifications are not supported here.", "error");
       return;
     }
 
@@ -2130,7 +2129,16 @@ export default function App() {
       track("notifications_enabled");
       showToast("Notifications enabled.");
     } else {
-      window.alert("Notifications were not enabled. You can allow them later in browser settings.");
+      showToast("Notifications were not enabled. You can allow them later in browser settings.", "error");
+    }
+  }
+
+  async function openDocument(filePath: string) {
+    try {
+      await openDocumentFile(filePath);
+      track("document_opened");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Document could not be opened.", "error");
     }
   }
 
@@ -2169,6 +2177,7 @@ export default function App() {
           onDeleteTenant={(id) => deleteRecord("tenant", id)}
           onEditMaintenance={(item) => openEdit({ kind: "maintenance", item })}
           onDeleteMaintenance={(id) => deleteRecord("maintenance", id)}
+          onOpenDocument={openDocument}
           onEditDocument={(doc) => openEdit({ kind: "document", item: doc })}
           onDeleteDocument={(id) => deleteRecord("document", id)}
           updateMaintenance={updateMaintenance}
@@ -2178,7 +2187,7 @@ export default function App() {
       );
     }
     if (tab === "tasks") return <Tasks data={data} onAdd={() => openAdd("task")} onEdit={(task) => openEdit({ kind: "task", item: task })} onDelete={(id) => deleteRecord("task", id)} toggleTask={toggleTask} />;
-    if (tab === "documents") return <Documents data={data} onAdd={() => openAdd("document")} onEdit={(doc) => openEdit({ kind: "document", item: doc })} onDelete={(id) => deleteRecord("document", id)} />;
+    if (tab === "documents") return <Documents data={data} onAdd={() => openAdd("document")} onOpen={openDocument} onEdit={(doc) => openEdit({ kind: "document", item: doc })} onDelete={(id) => deleteRecord("document", id)} />;
     return <SettingsScreen data={data} profile={profile} userId={session.user.id} activeTab={tab} notificationsEnabled={notificationsEnabled} analyticsEnabled={analyticsEnabled} setAnalyticsEnabled={setAnalyticsEnabled} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} onToggleNotifications={toggleNotifications} onSignOut={signOut} onTrack={track} />;
   }
 
@@ -2232,7 +2241,7 @@ export default function App() {
         <BottomNav active={tab} onChange={navigate} badge={badge} />
       </div>
       <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={savingRecord} onClose={closeModal} onSave={save} />
-      <ConfirmationToast message={toast} />
+      <ConfirmationToast notice={notice} />
     </div>
   );
 }
