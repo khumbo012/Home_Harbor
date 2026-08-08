@@ -41,6 +41,8 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key
 
 Each signed-in user gets one private `user_portfolios` row protected by row-level security. The current app stores the profile, onboarding state, and rental portfolio data in that row.
 
+The SQL also creates a private `documents` storage bucket. Uploaded document files are saved under the signed-in user's id, and storage policies restrict each user to their own files.
+
 ## Current Cloud Model
 
 The beta foundation uses a single JSON portfolio record per user:
@@ -50,3 +52,19 @@ The beta foundation uses a single JSON portfolio record per user:
 - `onboarded`: first-run setup status
 
 This is fast for beta setup. As the product grows, the next step is splitting those JSON sections into relational tables for properties, tenants, leases, documents, and maintenance events.
+
+## File Uploads
+
+Documents can now include an attached file. File metadata stays in the user's cloud portfolio JSON, while the file itself is stored privately in Supabase Storage.
+
+To enable uploads, make sure `supabase/schema.sql` has been run after this update so the `documents` bucket and storage policies exist.
+
+## Notifications And Reminders
+
+The app includes an in-app reminder center on the dashboard. It surfaces:
+
+- high-priority open maintenance
+- pending high-priority or upcoming tasks
+- expired or soon-expiring leases
+
+Users can enable browser notifications from the dashboard reminder panel or Settings. Browser notifications work while the app is open; production push notifications for background mobile delivery would require a later native/PWA push service.

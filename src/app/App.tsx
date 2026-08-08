@@ -97,6 +97,10 @@ interface DocItem {
   tenantName: string;
   date: string;
   size: string;
+  fileName?: string;
+  filePath?: string;
+  mimeType?: string;
+  uploadedAt?: string;
 }
 
 interface AppData {
@@ -122,6 +126,14 @@ interface OnboardingSetup {
     city: string;
     units: number;
   };
+}
+
+interface ReminderItem {
+  id: string;
+  title: string;
+  detail: string;
+  severity: "high" | "medium" | "low";
+  tab: Tab;
 }
 
 const DEFAULT_PROFILE: AppProfile = {
@@ -248,6 +260,32 @@ async function saveCloudPortfolio(userId: string, profile: AppProfile, data: App
   if (error) throw error;
 }
 
+async function uploadDocumentFile(userId: string, file: File, documentId: string) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const path = `${userId}/${documentId}/${Date.now()}-${safeName}`;
+  const { error } = await supabase.storage.from("documents").upload(path, file, {
+    cacheControl: "3600",
+    upsert: true,
+  });
+
+  if (error) throw error;
+  return path;
+}
+
+async function openDocumentFile(filePath: string) {
+  if (!supabase) return;
+
+  const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
+  if (error) {
+    window.alert(error.message);
+    return;
+  }
+
+  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
+
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -266,6 +304,74 @@ function propertyStats(data: AppData, propertyId: string) {
   const occupiedUnits = Math.min(tenants.length, property?.units || tenants.length);
   const revenue = tenants.reduce((sum, t) => sum + Number(t.rent || 0), 0);
   return { tenants, occupiedUnits, revenue };
+}
+
+function parseAppDate(value: string) {
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : new Date(time);
+}
+
+function daysUntil(value: string) {
+  const parsed = parseAppDate(value);
+  if (!parsed) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  parsed.setHours(0, 0, 0, 0);
+  return Math.ceil((parsed.getTime() - today.getTime()) / 86400000);
+}
+
+function formatReminderTiming(days: number | null) {
+  if (days === null) return "No date";
+  if (days < 0) return `${Math.abs(days)}d overdue`;
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  return `Due in ${days}d`;
+}
+
+function buildReminders(data: AppData): ReminderItem[] {
+  const maintenance = data.maintenance
+    .filter((item) => item.status !== "resolved" && item.priority === "high")
+    .map((item) => ({
+      id: `maintenance-${item.id}`,
+      title: item.title,
+      detail: `${propertyName(data, item.propertyId)} - ${item.unit || "No unit"} - high priority`,
+      severity: "high" as const,
+      tab: "properties" as const,
+    }));
+
+  const tasks = data.tasks
+    .filter((task) => task.status === "pending")
+    .map((task) => ({ task, days: daysUntil(task.dueDate) }))
+    .filter(({ days, task }) => task.priority === "high" || days === null || days <= 14)
+    .map(({ task, days }) => ({
+      id: `task-${task.id}`,
+      title: task.title,
+      detail: `${propertyName(data, task.propertyId)} - ${formatReminderTiming(days)}`,
+      severity: (task.priority === "high" || (days !== null && days <= 0) ? "high" : task.priority) as ReminderItem["severity"],
+      tab: "tasks" as const,
+    }));
+
+  const leases = data.tenants
+    .map((tenant) => ({ tenant, days: daysUntil(tenant.leaseEnd) }))
+    .filter(({ tenant, days }) => tenant.status !== "active" || (days !== null && days <= 60))
+    .map(({ tenant, days }) => ({
+      id: `lease-${tenant.id}`,
+      title: `Lease renewal - ${tenant.name}`,
+      detail: `${propertyName(data, tenant.propertyId)} - ${tenant.unit} - ${formatReminderTiming(days)}`,
+      severity: (tenant.status === "expired" || (days !== null && days <= 14) ? "high" : "medium") as ReminderItem["severity"],
+      tab: "tasks" as const,
+    }));
+
+  return [...maintenance, ...tasks, ...leases].sort((a, b) => {
+    const rank = { high: 0, medium: 1, low: 2 };
+    return rank[a.severity] - rank[b.severity];
+  });
+}
+
+function fileSizeLabel(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function priorityStyle(priority: string) {
@@ -429,7 +535,8 @@ function Sidebar({ active, onChange, badge, profile }: { active: Tab; onChange: 
   );
 }
 
-function Dashboard({ data, profile, onNav }: { data: AppData; profile: AppProfile; onNav: (tab: Tab) => void }) {
+function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onToggleNotifications }: { data: AppData; profile: AppProfile; reminders: ReminderItem[]; notificationsEnabled: boolean; onNav: (tab: Tab) => void; onToggleNotifications: () => void }) {
+  const [showNotifications, setShowNotifications] = useState(false);
   const totals = useMemo(() => {
     const units = data.properties.reduce((sum, p) => sum + p.units, 0);
     const revenue = data.tenants.reduce((sum, t) => sum + Number(t.rent || 0), 0);
@@ -448,12 +555,42 @@ function Dashboard({ data, profile, onNav }: { data: AppData; profile: AppProfil
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Friday, May 29, 2026</p>
             <h1 className="mt-1 text-2xl font-black leading-tight tracking-[-0.03em] text-foreground">Good morning,<br />{profile.name.split(" ")[0] || "there"}.</h1>
           </div>
-          <button className="relative mt-1 flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted" aria-label="Notifications">
+          <button onClick={() => setShowNotifications((visible) => !visible)} className="relative mt-1 flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted" aria-label="Notifications">
             <Bell className="h-5 w-5 text-foreground/60" />
-            {(totals.urgent.length + totals.expiring.length) > 0 && <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full border-2 border-background bg-red-500" />}
+            {reminders.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-red-500 px-1 text-[10px] font-black text-white">{reminders.length > 9 ? "9+" : reminders.length}</span>}
           </button>
         </div>
       </div>
+
+      {showNotifications && (
+        <section className="px-4 pb-4">
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-foreground">Reminders</p>
+                <p className="text-xs text-muted-foreground">{notificationsEnabled ? "Browser notifications enabled" : "In-app reminders active"}</p>
+              </div>
+              <button onClick={onToggleNotifications} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-black text-[#1A3352]">
+                {notificationsEnabled ? "On" : "Enable"}
+              </button>
+            </div>
+            <div className="space-y-2">
+              {reminders.length === 0 ? (
+                <p className="rounded-xl bg-background px-3 py-3 text-xs font-bold text-muted-foreground">No urgent reminders right now.</p>
+              ) : reminders.slice(0, 8).map((reminder) => (
+                <button key={reminder.id} onClick={() => onNav(reminder.tab)} className="flex w-full items-start gap-3 rounded-xl bg-background px-3 py-3 text-left">
+                  <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${reminder.severity === "high" ? "bg-red-500" : reminder.severity === "medium" ? "bg-amber-400" : "bg-slate-300"}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-black text-foreground">{reminder.title}</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{reminder.detail}</span>
+                  </span>
+                  <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="grid grid-cols-2 gap-2.5 px-4 pb-6 pt-5">
         {[
@@ -714,8 +851,9 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
             {docs.length === 0 ? <EmptyState icon={FileText} title="No documents yet" /> : docs.map((doc) => (
               <div key={doc.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-foreground">{doc.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{doc.date} - {doc.size}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-foreground">{doc.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{doc.date} - {doc.size}{doc.fileName ? ` - ${doc.fileName}` : ""}</p></div>
                 <div className="flex flex-shrink-0 gap-2">
+                  {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => openDocumentFile(doc.filePath!)} />}
                   <IconAction label="Edit document" icon={Pencil} onClick={() => onEditDocument(doc)} />
                   <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDeleteDocument(doc.id)} />
                 </div>
@@ -777,8 +915,9 @@ function Documents({ data, onAdd, onEdit, onDelete }: { data: AppData; onAdd: ()
         {filtered.length === 0 ? <EmptyState icon={FileText} title="No documents found" /> : filtered.map((doc) => (
           <div key={doc.id} className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/20 hover:shadow-sm">
             <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
-            <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-bold text-foreground">{doc.name}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{propertyName(data, doc.propertyId)}{doc.tenantName ? ` - ${doc.tenantName}` : ""} - {doc.date} - {doc.size}</p></div>
+            <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-bold text-foreground">{doc.name}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{propertyName(data, doc.propertyId)}{doc.tenantName ? ` - ${doc.tenantName}` : ""} - {doc.date} - {doc.size}{doc.fileName ? ` - ${doc.fileName}` : ""}</p></div>
             <div className="flex flex-shrink-0 gap-2">
+              {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => openDocumentFile(doc.filePath!)} />}
               <IconAction label="Edit document" icon={Pencil} onClick={() => onEdit(doc)} />
               <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDelete(doc.id)} />
             </div>
@@ -789,7 +928,7 @@ function Documents({ data, onAdd, onEdit, onDelete }: { data: AppData; onAdd: ()
   );
 }
 
-function SettingsScreen({ data, profile, resetData, exportData, replayOnboarding, onSignOut }: { data: AppData; profile: AppProfile; resetData: () => void; exportData: () => void; replayOnboarding: () => void; onSignOut: () => void }) {
+function SettingsScreen({ data, profile, notificationsEnabled, resetData, exportData, replayOnboarding, onToggleNotifications, onSignOut }: { data: AppData; profile: AppProfile; notificationsEnabled: boolean; resetData: () => void; exportData: () => void; replayOnboarding: () => void; onToggleNotifications: () => void; onSignOut: () => void }) {
   const monthly = data.tenants.reduce((sum, tenant) => sum + Number(tenant.rent || 0), 0);
   const items = [
     { section: "Portfolio", rows: [{ Icon: Building2, label: "Properties", value: `${data.properties.length} active` }, { Icon: Users, label: "Tenants", value: `${data.tenants.length} active` }, { Icon: DollarSign, label: "Rent roll", value: `${money(monthly)}/mo` }] },
@@ -824,6 +963,10 @@ function SettingsScreen({ data, profile, resetData, exportData, replayOnboarding
           <button onClick={exportData} className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-[#1A3352]"><Download className="h-4 w-4" />Export</button>
           <button onClick={resetData} className="flex items-center justify-center gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-black text-red-700"><RefreshCcw className="h-4 w-4" />Reset demo</button>
         </div>
+        <button onClick={onToggleNotifications} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-muted-foreground">
+          <Bell className="h-4 w-4" />
+          Browser notifications {notificationsEnabled ? "on" : "off"}
+        </button>
         <button onClick={replayOnboarding} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-muted-foreground">
           <User className="h-4 w-4" />
           Replay onboarding
@@ -844,16 +987,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputClass = "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#1A3352]/40 focus:ring-2 focus:ring-[#1A3352]/20";
 
-function AppModal({ kind, data, selectedProperty, editRecord, onClose, onSave }: { kind: ModalKind; data: AppData; selectedProperty: string | null; editRecord: EditableRecord; onClose: () => void; onSave: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editRecord: EditableRecord) => void }) {
+function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, onSave }: { kind: ModalKind; data: AppData; selectedProperty: string | null; editRecord: EditableRecord; saving: boolean; onClose: () => void; onSave: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editRecord: EditableRecord) => Promise<void> }) {
   if (!kind) return null;
   const editing = editRecord?.kind === kind;
   const item = editing ? editRecord.item : null;
   const titlePrefix = editing ? "Edit" : "Add";
   const title = kind === "property" ? `${titlePrefix} Property` : kind === "tenant" ? `${titlePrefix} Tenant` : kind === "maintenance" ? `${titlePrefix} Maintenance` : kind === "task" ? `${titlePrefix} Task` : editing ? "Edit Document" : "Upload Document";
 
-  function submit(event: React.FormEvent<HTMLFormElement>) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave(kind, Object.fromEntries(new FormData(event.currentTarget)), editRecord);
+    await onSave(kind, Object.fromEntries(new FormData(event.currentTarget)), editRecord);
   }
 
   return (
@@ -919,13 +1062,15 @@ function AppModal({ kind, data, selectedProperty, editRecord, onClose, onSave }:
               <Field label="Document name"><input name="name" required defaultValue={(item as DocItem | null)?.name || ""} className={inputClass} placeholder="Lease Agreement - Alex Morgan" /></Field>
               <div className="grid grid-cols-2 gap-3"><Field label="Type"><select name="type" defaultValue={(item as DocItem | null)?.type || "lease"} className={inputClass}><option value="lease">Lease</option><option value="inspection">Inspection</option><option value="warranty">Warranty</option><option value="receipt">Receipt</option><option value="application">Application</option><option value="other">Other</option></select></Field><Field label="Size"><input name="size" defaultValue={(item as DocItem | null)?.size || ""} className={inputClass} placeholder="320 KB" /></Field></div>
               <div className="grid grid-cols-2 gap-3"><Field label="Tenant"><input name="tenantName" defaultValue={(item as DocItem | null)?.tenantName || ""} className={inputClass} placeholder="Optional" /></Field><Field label="Date"><input name="date" required defaultValue={(item as DocItem | null)?.date || ""} className={inputClass} placeholder="May 29, 2026" /></Field></div>
+              <Field label={editing ? "Replace file" : "Attach file"}><input name="file" type="file" className={inputClass} /></Field>
+              {editing && (item as DocItem | null)?.fileName && <p className="rounded-xl bg-background px-3 py-2 text-xs font-bold text-muted-foreground">Current file: {(item as DocItem).fileName}</p>}
             </>
           )}
         </div>
 
         <div className="mt-5 flex gap-2">
-          <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-black text-muted-foreground">Cancel</button>
-          <button type="submit" className="flex-1 rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white">{editing ? "Save changes" : "Save"}</button>
+          <button type="button" onClick={onClose} disabled={saving} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-black text-muted-foreground disabled:opacity-50">Cancel</button>
+          <button type="submit" disabled={saving} className="flex-1 rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? "Saving..." : editing ? "Save changes" : "Save"}</button>
         </div>
       </form>
     </div>
@@ -1215,10 +1360,14 @@ export default function App() {
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const [editRecord, setEditRecord] = useState<EditableRecord>(null);
+  const [savingRecord, setSavingRecord] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem("keystone-browser-notifications") === "true");
+  const [lastNotificationKey, setLastNotificationKey] = useState("");
 
-  const badge = data.maintenance.filter((m) => m.priority === "high" && m.status !== "resolved").length + data.tenants.filter((t) => t.status === "expiring" || t.status === "expired").length;
   const serializedData = JSON.stringify(data);
   const serializedProfile = JSON.stringify(profile);
+  const badge = data.maintenance.filter((m) => m.priority === "high" && m.status !== "resolved").length + data.tenants.filter((t) => t.status === "expiring" || t.status === "expired").length;
+  const reminders = useMemo(() => buildReminders(data), [serializedData]);
 
   useEffect(() => {
     if (!supabase) {
@@ -1296,6 +1445,20 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [session?.user.id, cloudReady, serializedData, serializedProfile, onboarded]);
 
+  useEffect(() => {
+    if (!notificationsEnabled || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const urgent = reminders.filter((reminder) => reminder.severity === "high");
+    if (urgent.length === 0) return;
+
+    const key = urgent.map((reminder) => reminder.id).join("|");
+    if (key === lastNotificationKey) return;
+
+    new Notification("Home Harbor reminders", {
+      body: `${urgent.length} urgent ${urgent.length === 1 ? "item needs" : "items need"} your attention.`,
+    });
+    setLastNotificationKey(key);
+  }, [notificationsEnabled, reminders, lastNotificationKey]);
+
   function navigate(next: Tab) {
     setTab(next);
     if (next !== "properties") setSelectedProperty(null);
@@ -1316,8 +1479,28 @@ export default function App() {
     setEditRecord(null);
   }
 
-  function save(kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editing: EditableRecord) {
-    setData((current) => {
+  async function save(kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editing: EditableRecord) {
+    setSavingRecord(true);
+    try {
+      let uploadedDocPatch: Partial<DocItem> = {};
+      if (kind === "document") {
+        const file = payload.file instanceof File && payload.file.size > 0 ? payload.file : null;
+        if (file) {
+          if (!session?.user.id) throw new Error("Sign in before uploading files.");
+          const documentId = editing?.kind === "document" ? editing.item.id : uid("d");
+          const filePath = await uploadDocumentFile(session.user.id, file, documentId);
+          uploadedDocPatch = {
+            id: documentId,
+            filePath,
+            fileName: file.name,
+            mimeType: file.type,
+            uploadedAt: new Date().toISOString(),
+            size: fileSizeLabel(file.size),
+          };
+        }
+      }
+
+      setData((current) => {
       if (kind === "property") {
         const previous = editing?.kind === "property" ? editing.item : null;
         const imageUrl = String(payload.imageUrl || "").trim() || previous?.imageUrl || DEFAULT_IMAGES[current.properties.length % DEFAULT_IMAGES.length];
@@ -1340,10 +1523,27 @@ export default function App() {
         return { ...current, tasks: previous ? current.tasks.map((task) => task.id === previous.id ? nextTask : task) : [...current.tasks, nextTask] };
       }
       const previous = editing?.kind === "document" ? editing.item : null;
-      const nextDoc = { id: previous?.id || uid("d"), name: String(payload.name), type: payload.type as DocItem["type"], propertyId: String(payload.propertyId), tenantName: String(payload.tenantName || ""), date: String(payload.date), size: String(payload.size || "0 KB") };
+      const nextDoc = {
+        id: uploadedDocPatch.id || previous?.id || uid("d"),
+        name: String(payload.name),
+        type: payload.type as DocItem["type"],
+        propertyId: String(payload.propertyId),
+        tenantName: String(payload.tenantName || ""),
+        date: String(payload.date),
+        size: String(uploadedDocPatch.size || payload.size || previous?.size || "0 KB"),
+        fileName: uploadedDocPatch.fileName || previous?.fileName,
+        filePath: uploadedDocPatch.filePath || previous?.filePath,
+        mimeType: uploadedDocPatch.mimeType || previous?.mimeType,
+        uploadedAt: uploadedDocPatch.uploadedAt || previous?.uploadedAt,
+      };
       return { ...current, docs: previous ? current.docs.map((doc) => doc.id === previous.id ? nextDoc : doc) : [...current.docs, nextDoc] };
-    });
-    closeModal();
+      });
+      closeModal();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Save failed.");
+    } finally {
+      setSavingRecord(false);
+    }
   }
 
   function deleteRecord(kind: Exclude<ModalKind, null>, id: string) {
@@ -1422,6 +1622,30 @@ export default function App() {
     setOnboarded(false);
   }
 
+  async function toggleNotifications() {
+    if (typeof Notification === "undefined") {
+      window.alert("Browser notifications are not supported here.");
+      return;
+    }
+
+    if (notificationsEnabled) {
+      localStorage.removeItem("keystone-browser-notifications");
+      setNotificationsEnabled(false);
+      return;
+    }
+
+    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (permission === "granted") {
+      localStorage.setItem("keystone-browser-notifications", "true");
+      setNotificationsEnabled(true);
+      new Notification("Home Harbor reminders enabled", {
+        body: "You will be notified when urgent rental items need attention.",
+      });
+    } else {
+      window.alert("Notifications were not enabled. You can allow them later in browser settings.");
+    }
+  }
+
   async function signOut() {
     await supabase?.auth.signOut();
     setSession(null);
@@ -1439,7 +1663,7 @@ export default function App() {
   }
 
   function renderContent() {
-    if (tab === "dashboard") return <Dashboard data={data} profile={profile} onNav={navigate} />;
+    if (tab === "dashboard") return <Dashboard data={data} profile={profile} reminders={reminders} notificationsEnabled={notificationsEnabled} onNav={navigate} onToggleNotifications={toggleNotifications} />;
     if (tab === "properties") {
       return selectedProperty ? (
         <PropertyDetail
@@ -1465,7 +1689,7 @@ export default function App() {
     }
     if (tab === "tasks") return <Tasks data={data} onAdd={() => openAdd("task")} onEdit={(task) => openEdit({ kind: "task", item: task })} onDelete={(id) => deleteRecord("task", id)} toggleTask={toggleTask} />;
     if (tab === "documents") return <Documents data={data} onAdd={() => openAdd("document")} onEdit={(doc) => openEdit({ kind: "document", item: doc })} onDelete={(id) => deleteRecord("document", id)} />;
-    return <SettingsScreen data={data} profile={profile} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} onSignOut={signOut} />;
+    return <SettingsScreen data={data} profile={profile} notificationsEnabled={notificationsEnabled} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} onToggleNotifications={toggleNotifications} onSignOut={signOut} />;
   }
 
   if (!supabase) {
@@ -1516,7 +1740,7 @@ export default function App() {
         </main>
         <BottomNav active={tab} onChange={navigate} badge={badge} />
       </div>
-      <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} onClose={closeModal} onSave={save} />
+      <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={savingRecord} onClose={closeModal} onSave={save} />
     </div>
   );
 }
