@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { createClient, type Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -18,11 +19,13 @@ import {
   Mail,
   MapPin,
   Phone,
+  Pencil,
   Plus,
   RefreshCcw,
   Search,
   Settings,
   Shield,
+  Trash2,
   Upload,
   User,
   Users,
@@ -32,6 +35,13 @@ import {
 
 type Tab = "dashboard" | "properties" | "tasks" | "documents" | "settings";
 type ModalKind = "property" | "tenant" | "maintenance" | "task" | "document" | null;
+type EditableRecord =
+  | { kind: "property"; item: Property }
+  | { kind: "tenant"; item: Tenant }
+  | { kind: "maintenance"; item: MaintenanceItem }
+  | { kind: "task"; item: TaskItem }
+  | { kind: "document"; item: DocItem }
+  | null;
 
 interface Property {
   id: string;
@@ -120,6 +130,10 @@ const DEFAULT_PROFILE: AppProfile = {
   portfolioName: "Rental portfolio",
 };
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
 const DEFAULT_IMAGES = [
   "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900&h=520&fit=crop&auto=format",
   "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=900&h=520&fit=crop&auto=format",
@@ -206,6 +220,34 @@ function useStoredProfile() {
   return [profile, setProfile] as const;
 }
 
+async function loadCloudPortfolio(userId: string) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { data, error } = await supabase
+    .from("user_portfolios")
+    .select("profile,data,onboarded")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as { profile: AppProfile | null; data: AppData | null; onboarded: boolean | null } | null;
+}
+
+async function saveCloudPortfolio(userId: string, profile: AppProfile, data: AppData, onboarded: boolean) {
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("user_portfolios")
+    .upsert({
+      user_id: userId,
+      profile,
+      data,
+      onboarded,
+    }, { onConflict: "user_id" });
+
+  if (error) throw error;
+}
+
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -276,6 +318,22 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
     <button onClick={onClick} className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-[#1A3352] px-3 py-1.5 text-xs font-black text-white transition-all hover:bg-[#162B44] active:scale-95">
       <Plus className="h-3.5 w-3.5" />
       {label}
+    </button>
+  );
+}
+
+function IconAction({ label, icon: Icon, tone = "neutral", onClick }: { label: string; icon: React.ElementType; tone?: "neutral" | "danger"; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs transition-all hover:shadow-sm ${
+        tone === "danger" ? "border-red-100 bg-red-50 text-red-700" : "border-border bg-card text-muted-foreground hover:text-foreground"
+      }`}
+      aria-label={label}
+      title={label}
+    >
+      <Icon className="h-3.5 w-3.5" />
     </button>
   );
 }
@@ -475,7 +533,7 @@ function Dashboard({ data, profile, onNav }: { data: AppData; profile: AppProfil
   );
 }
 
-function PropertiesList({ data, onSelect, onAdd }: { data: AppData; onSelect: (id: string) => void; onAdd: () => void }) {
+function PropertiesList({ data, onSelect, onAdd, onEdit, onDelete }: { data: AppData; onSelect: (id: string) => void; onAdd: () => void; onEdit: (property: Property) => void; onDelete: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const filtered = data.properties.filter((p) => `${p.name} ${p.address} ${p.city}`.toLowerCase().includes(query.toLowerCase()));
 
@@ -488,8 +546,9 @@ function PropertiesList({ data, onSelect, onAdd }: { data: AppData; onSelect: (i
           const stats = propertyStats(data, property.id);
           const openIssues = data.maintenance.filter((m) => m.propertyId === property.id && m.status !== "resolved").length;
           return (
-            <button key={property.id} onClick={() => onSelect(property.id)} className="group w-full overflow-hidden rounded-2xl border border-border bg-card text-left transition-all duration-200 hover:border-[#1A3352]/20 hover:shadow-lg active:scale-[0.99]">
-              <div className="relative h-44 bg-slate-200">
+            <div key={property.id} className="group overflow-hidden rounded-2xl border border-border bg-card transition-all duration-200 hover:border-[#1A3352]/20 hover:shadow-lg">
+              <button onClick={() => onSelect(property.id)} className="w-full text-left active:scale-[0.99]">
+                <div className="relative h-44 bg-slate-200">
                 <img src={property.imageUrl || DEFAULT_IMAGES[0]} alt={property.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
                 {openIssues > 0 && <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-red-500 px-2 py-1 text-[10px] font-black text-white"><Wrench className="h-2.5 w-2.5" />{openIssues} open</div>}
@@ -501,7 +560,8 @@ function PropertiesList({ data, onSelect, onAdd }: { data: AppData; onSelect: (i
                   <span className={`flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-black text-white ${stats.occupiedUnits === property.units ? "bg-teal-500" : "bg-amber-500"}`}>{stats.occupiedUnits}/{property.units}</span>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 p-4">
+              </button>
+              <div className="grid grid-cols-3 gap-2 px-4 pt-4">
                 {[{ label: "Units", value: property.units }, { label: "Tenants", value: stats.tenants.length }, { label: "Monthly", value: money(stats.revenue) }].map((item) => (
                   <div key={item.label} className="rounded-xl bg-background py-2.5 text-center">
                     <p className="text-[15px] font-black tracking-[-0.03em] text-foreground">{item.value}</p>
@@ -509,7 +569,14 @@ function PropertiesList({ data, onSelect, onAdd }: { data: AppData; onSelect: (i
                   </div>
                 ))}
               </div>
-            </button>
+              <div className="flex items-center justify-between gap-2 px-4 py-3">
+                <button onClick={() => onSelect(property.id)} className="text-xs font-black text-[#1A3352]">Open</button>
+                <div className="flex gap-2">
+                  <IconAction label="Edit property" icon={Pencil} onClick={() => onEdit(property)} />
+                  <IconAction label="Delete property" icon={Trash2} tone="danger" onClick={() => onDelete(property.id)} />
+                </div>
+              </div>
+            </div>
           );
         })}
         {filtered.length === 0 && <EmptyState icon={Building2} title="No properties found" subtitle="Try a different search or add a new property." />}
@@ -518,13 +585,21 @@ function PropertiesList({ data, onSelect, onAdd }: { data: AppData; onSelect: (i
   );
 }
 
-function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenance, onAddDocument, updateMaintenance }: {
+function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenance, onAddDocument, onEditProperty, onDeleteProperty, onEditTenant, onDeleteTenant, onEditMaintenance, onDeleteMaintenance, onEditDocument, onDeleteDocument, updateMaintenance }: {
   data: AppData;
   propertyId: string;
   onBack: () => void;
   onAddTenant: () => void;
   onAddMaintenance: () => void;
   onAddDocument: () => void;
+  onEditProperty: (property: Property) => void;
+  onDeleteProperty: (id: string) => void;
+  onEditTenant: (tenant: Tenant) => void;
+  onDeleteTenant: (id: string) => void;
+  onEditMaintenance: (item: MaintenanceItem) => void;
+  onDeleteMaintenance: (id: string) => void;
+  onEditDocument: (doc: DocItem) => void;
+  onDeleteDocument: (id: string) => void;
   updateMaintenance: (id: string, status: MaintenanceItem["status"]) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"overview" | "maintenance" | "documents">("overview");
@@ -539,7 +614,18 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
 
   return (
     <div className="pb-24 lg:pb-10">
-      <PageHeader title={property.name} subtitle={property.city} onBack={onBack} action={openIssues > 0 && <Chip className="border-red-100 bg-red-50 text-red-700">{openIssues} open</Chip>} />
+      <PageHeader
+        title={property.name}
+        subtitle={property.city}
+        onBack={onBack}
+        action={
+          <div className="flex items-center gap-2">
+            {openIssues > 0 && <Chip className="border-red-100 bg-red-50 text-red-700">{openIssues} open</Chip>}
+            <IconAction label="Edit property" icon={Pencil} onClick={() => onEditProperty(property)} />
+            <IconAction label="Delete property" icon={Trash2} tone="danger" onClick={() => onDeleteProperty(property.id)} />
+          </div>
+        }
+      />
       <div className="relative h-48 bg-slate-200">
         <img src={property.imageUrl || DEFAULT_IMAGES[0]} alt={property.name} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
@@ -574,7 +660,11 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
               <div key={tenant.id} className="rounded-2xl border border-border bg-card p-4">
                 <div className="mb-2.5 flex items-start justify-between gap-3">
                   <div className="min-w-0"><p className="text-sm font-black leading-tight text-foreground">{tenant.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{tenant.unit} - {money(tenant.rent)}/mo</p></div>
-                  <Chip className={statusStyle(tenant.status)}>{tenant.status === "expiring" ? "Expiring" : tenant.status}</Chip>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    <Chip className={statusStyle(tenant.status)}>{tenant.status === "expiring" ? "Expiring" : tenant.status}</Chip>
+                    <IconAction label="Edit tenant" icon={Pencil} onClick={() => onEditTenant(tenant)} />
+                    <IconAction label="Delete tenant" icon={Trash2} tone="danger" onClick={() => onDeleteTenant(tenant.id)} />
+                  </div>
                 </div>
                 <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground"><Calendar className="h-3.5 w-3.5" /><span>{tenant.leaseStart} - {tenant.leaseEnd}</span></div>
                 {tenant.notes && <p className="mb-3 rounded-xl bg-muted/40 px-3 py-2 text-xs italic leading-relaxed text-muted-foreground">"{tenant.notes}"</p>}
@@ -599,7 +689,14 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
             <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Requests</p><button onClick={onAddMaintenance} className="flex items-center gap-1 text-xs font-black text-[#1A3352]"><Plus className="h-3.5 w-3.5" />Add</button></div>
             {maintenance.length === 0 ? <EmptyState icon={Wrench} title="No maintenance requests" /> : maintenance.map((item) => (
               <div key={item.id} className="rounded-2xl border border-border bg-card p-4">
-                <div className="mb-2 flex items-start justify-between gap-2"><p className="flex-1 text-sm font-black leading-tight text-foreground">{item.title}</p><Chip className={statusStyle(item.status)}>{item.status === "in-progress" ? "In progress" : item.status}</Chip></div>
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <p className="flex-1 text-sm font-black leading-tight text-foreground">{item.title}</p>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    <Chip className={statusStyle(item.status)}>{item.status === "in-progress" ? "In progress" : item.status}</Chip>
+                    <IconAction label="Edit maintenance" icon={Pencil} onClick={() => onEditMaintenance(item)} />
+                    <IconAction label="Delete maintenance" icon={Trash2} tone="danger" onClick={() => onDeleteMaintenance(item.id)} />
+                  </div>
+                </div>
                 <p className="mb-3 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
                 <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{item.unit} - {item.tenantName}</span><span>{item.date}</span>{item.vendor && <span className="font-bold text-[#1A3352]">{item.vendor}</span>}</div>
                 <div className="flex items-center justify-between gap-2">
@@ -618,7 +715,10 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
               <div key={doc.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-foreground">{doc.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{doc.date} - {doc.size}</p></div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <div className="flex flex-shrink-0 gap-2">
+                  <IconAction label="Edit document" icon={Pencil} onClick={() => onEditDocument(doc)} />
+                  <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDeleteDocument(doc.id)} />
+                </div>
               </div>
             ))}
           </>
@@ -628,7 +728,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
   );
 }
 
-function Tasks({ data, onAdd, toggleTask }: { data: AppData; onAdd: () => void; toggleTask: (id: string) => void }) {
+function Tasks({ data, onAdd, onEdit, onDelete, toggleTask }: { data: AppData; onAdd: () => void; onEdit: (task: TaskItem) => void; onDelete: (id: string) => void; toggleTask: (id: string) => void }) {
   const [filter, setFilter] = useState<"all" | "high" | "medium" | "low" | "done">("all");
   const visible = data.tasks.filter((task) => filter === "done" ? task.status === "done" : task.status === "pending" && (filter === "all" || task.priority === filter));
   const highCount = data.tasks.filter((task) => task.status === "pending" && task.priority === "high").length;
@@ -645,6 +745,10 @@ function Tasks({ data, onAdd, toggleTask }: { data: AppData; onAdd: () => void; 
             <button onClick={() => toggleTask(task.id)} className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all ${task.status === "done" ? "border-[#0D9488] bg-[#0D9488]" : "border-border hover:border-[#0D9488] hover:bg-teal-50"}`} aria-label="Toggle task">{task.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}</button>
             <div className="min-w-0 flex-1"><p className={`text-[13px] font-bold leading-tight ${task.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}>{task.title}</p><div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{propertyName(data, task.propertyId)}</span><span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{task.dueDate}</span></div></div>
             <div className="flex flex-shrink-0 flex-col items-end gap-1.5"><Chip className={priorityStyle(task.priority)}>{task.priority}</Chip><span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black capitalize text-slate-600">{task.type}</span></div>
+            <div className="flex flex-shrink-0 flex-col gap-1.5">
+              <IconAction label="Edit task" icon={Pencil} onClick={() => onEdit(task)} />
+              <IconAction label="Delete task" icon={Trash2} tone="danger" onClick={() => onDelete(task.id)} />
+            </div>
           </div>
         ))}
       </div>
@@ -652,7 +756,7 @@ function Tasks({ data, onAdd, toggleTask }: { data: AppData; onAdd: () => void; 
   );
 }
 
-function Documents({ data, onAdd }: { data: AppData; onAdd: () => void }) {
+function Documents({ data, onAdd, onEdit, onDelete }: { data: AppData; onAdd: () => void; onEdit: (doc: DocItem) => void; onDelete: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState<DocItem["type"] | "all">("all");
   const filtered = data.docs.filter((doc) => {
@@ -671,18 +775,21 @@ function Documents({ data, onAdd }: { data: AppData; onAdd: () => void }) {
       </div>
       <div className="space-y-2 px-4">
         {filtered.length === 0 ? <EmptyState icon={FileText} title="No documents found" /> : filtered.map((doc) => (
-          <button key={doc.id} className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/20 hover:shadow-sm">
+          <div key={doc.id} className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/20 hover:shadow-sm">
             <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
             <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-bold text-foreground">{doc.name}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{propertyName(data, doc.propertyId)}{doc.tenantName ? ` - ${doc.tenantName}` : ""} - {doc.date} - {doc.size}</p></div>
-            <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-          </button>
+            <div className="flex flex-shrink-0 gap-2">
+              <IconAction label="Edit document" icon={Pencil} onClick={() => onEdit(doc)} />
+              <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDelete(doc.id)} />
+            </div>
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-function SettingsScreen({ data, profile, resetData, exportData, replayOnboarding }: { data: AppData; profile: AppProfile; resetData: () => void; exportData: () => void; replayOnboarding: () => void }) {
+function SettingsScreen({ data, profile, resetData, exportData, replayOnboarding, onSignOut }: { data: AppData; profile: AppProfile; resetData: () => void; exportData: () => void; replayOnboarding: () => void; onSignOut: () => void }) {
   const monthly = data.tenants.reduce((sum, tenant) => sum + Number(tenant.rent || 0), 0);
   const items = [
     { section: "Portfolio", rows: [{ Icon: Building2, label: "Properties", value: `${data.properties.length} active` }, { Icon: Users, label: "Tenants", value: `${data.tenants.length} active` }, { Icon: DollarSign, label: "Rent roll", value: `${money(monthly)}/mo` }] },
@@ -721,6 +828,10 @@ function SettingsScreen({ data, profile, resetData, exportData, replayOnboarding
           <User className="h-4 w-4" />
           Replay onboarding
         </button>
+        <button onClick={onSignOut} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-muted-foreground">
+          <Lock className="h-4 w-4" />
+          Sign out
+        </button>
         <div className="pb-4 pt-6 text-center"><p className="text-xs font-bold text-muted-foreground">Keystone - v1.1.0</p><p className="mt-0.5 text-xs text-muted-foreground">Your rentals, organized.</p></div>
       </div>
     </div>
@@ -733,37 +844,40 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputClass = "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#1A3352]/40 focus:ring-2 focus:ring-[#1A3352]/20";
 
-function AppModal({ kind, data, selectedProperty, onClose, onSave }: { kind: ModalKind; data: AppData; selectedProperty: string | null; onClose: () => void; onSave: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>) => void }) {
+function AppModal({ kind, data, selectedProperty, editRecord, onClose, onSave }: { kind: ModalKind; data: AppData; selectedProperty: string | null; editRecord: EditableRecord; onClose: () => void; onSave: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editRecord: EditableRecord) => void }) {
   if (!kind) return null;
-  const title = kind === "property" ? "Add Property" : kind === "tenant" ? "Add Tenant" : kind === "maintenance" ? "Add Maintenance" : kind === "task" ? "Add Task" : "Upload Document";
+  const editing = editRecord?.kind === kind;
+  const item = editing ? editRecord.item : null;
+  const titlePrefix = editing ? "Edit" : "Add";
+  const title = kind === "property" ? `${titlePrefix} Property` : kind === "tenant" ? `${titlePrefix} Tenant` : kind === "maintenance" ? `${titlePrefix} Maintenance` : kind === "task" ? `${titlePrefix} Task` : editing ? "Edit Document" : "Upload Document";
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave(kind, Object.fromEntries(new FormData(event.currentTarget)));
+    onSave(kind, Object.fromEntries(new FormData(event.currentTarget)), editRecord);
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-0 sm:items-center sm:justify-center sm:p-4">
       <form onSubmit={submit} className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card p-4 shadow-2xl sm:max-w-lg sm:rounded-2xl">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <div><p className="text-lg font-black tracking-[-0.03em] text-foreground">{title}</p><p className="text-xs text-muted-foreground">Saved to this browser automatically.</p></div>
+          <div><p className="text-lg font-black tracking-[-0.03em] text-foreground">{title}</p><p className="text-xs text-muted-foreground">Saved to your cloud portfolio automatically.</p></div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-muted" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
 
         <div className="space-y-3">
           {kind === "property" && (
             <>
-              <Field label="Property name"><input name="name" required className={inputClass} placeholder="Cedar Lane Apartments" /></Field>
-              <Field label="Street address"><input name="address" required className={inputClass} placeholder="100 Cedar Lane" /></Field>
-              <Field label="City / ZIP"><input name="city" required className={inputClass} placeholder="Oakland, CA 94610" /></Field>
-              <Field label="Units"><input name="units" type="number" min="1" defaultValue="1" required className={inputClass} /></Field>
-              <Field label="Image URL"><input name="imageUrl" className={inputClass} placeholder="Optional property photo URL" /></Field>
+              <Field label="Property name"><input name="name" required defaultValue={(item as Property | null)?.name || ""} className={inputClass} placeholder="Cedar Lane Apartments" /></Field>
+              <Field label="Street address"><input name="address" required defaultValue={(item as Property | null)?.address || ""} className={inputClass} placeholder="100 Cedar Lane" /></Field>
+              <Field label="City / ZIP"><input name="city" required defaultValue={(item as Property | null)?.city || ""} className={inputClass} placeholder="Oakland, CA 94610" /></Field>
+              <Field label="Units"><input name="units" type="number" min="1" defaultValue={(item as Property | null)?.units || 1} required className={inputClass} /></Field>
+              <Field label="Image URL"><input name="imageUrl" defaultValue={(item as Property | null)?.imageUrl || ""} className={inputClass} placeholder="Optional property photo URL" /></Field>
             </>
           )}
 
           {(kind === "tenant" || kind === "maintenance" || kind === "task" || kind === "document") && (
             <Field label="Property">
-              <select name="propertyId" defaultValue={selectedProperty || ""} className={inputClass} required={kind !== "task"}>
+              <select name="propertyId" defaultValue={(item as Tenant | MaintenanceItem | TaskItem | DocItem | null)?.propertyId || selectedProperty || ""} className={inputClass} required={kind !== "task"}>
                 {kind === "task" && <option value="">All properties</option>}
                 {data.properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
               </select>
@@ -772,48 +886,162 @@ function AppModal({ kind, data, selectedProperty, onClose, onSave }: { kind: Mod
 
           {kind === "tenant" && (
             <>
-              <Field label="Tenant name"><input name="name" required className={inputClass} placeholder="Alex Morgan" /></Field>
-              <div className="grid grid-cols-2 gap-3"><Field label="Unit"><input name="unit" required className={inputClass} placeholder="Unit 3B" /></Field><Field label="Rent"><input name="rent" type="number" min="0" required className={inputClass} placeholder="2100" /></Field></div>
-              <div className="grid grid-cols-2 gap-3"><Field label="Phone"><input name="phone" className={inputClass} placeholder="(510) 555-0100" /></Field><Field label="Email"><input name="email" type="email" className={inputClass} placeholder="tenant@email.com" /></Field></div>
-              <div className="grid grid-cols-2 gap-3"><Field label="Lease start"><input name="leaseStart" required className={inputClass} placeholder="Jun 1, 2026" /></Field><Field label="Lease end"><input name="leaseEnd" required className={inputClass} placeholder="May 31, 2027" /></Field></div>
-              <Field label="Status"><select name="status" className={inputClass}><option value="active">Active</option><option value="expiring">Expiring</option><option value="expired">Expired</option></select></Field>
-              <Field label="Notes"><textarea name="notes" rows={3} className={inputClass} placeholder="Preferences, reminders, lease notes" /></Field>
+              <Field label="Tenant name"><input name="name" required defaultValue={(item as Tenant | null)?.name || ""} className={inputClass} placeholder="Alex Morgan" /></Field>
+              <div className="grid grid-cols-2 gap-3"><Field label="Unit"><input name="unit" required defaultValue={(item as Tenant | null)?.unit || ""} className={inputClass} placeholder="Unit 3B" /></Field><Field label="Rent"><input name="rent" type="number" min="0" defaultValue={(item as Tenant | null)?.rent || ""} required className={inputClass} placeholder="2100" /></Field></div>
+              <div className="grid grid-cols-2 gap-3"><Field label="Phone"><input name="phone" defaultValue={(item as Tenant | null)?.phone || ""} className={inputClass} placeholder="(510) 555-0100" /></Field><Field label="Email"><input name="email" type="email" defaultValue={(item as Tenant | null)?.email || ""} className={inputClass} placeholder="tenant@email.com" /></Field></div>
+              <div className="grid grid-cols-2 gap-3"><Field label="Lease start"><input name="leaseStart" required defaultValue={(item as Tenant | null)?.leaseStart || ""} className={inputClass} placeholder="Jun 1, 2026" /></Field><Field label="Lease end"><input name="leaseEnd" required defaultValue={(item as Tenant | null)?.leaseEnd || ""} className={inputClass} placeholder="May 31, 2027" /></Field></div>
+              <Field label="Status"><select name="status" defaultValue={(item as Tenant | null)?.status || "active"} className={inputClass}><option value="active">Active</option><option value="expiring">Expiring</option><option value="expired">Expired</option></select></Field>
+              <Field label="Notes"><textarea name="notes" rows={3} defaultValue={(item as Tenant | null)?.notes || ""} className={inputClass} placeholder="Preferences, reminders, lease notes" /></Field>
             </>
           )}
 
           {kind === "maintenance" && (
             <>
-              <Field label="Title"><input name="title" required className={inputClass} placeholder="Garbage disposal jammed" /></Field>
-              <Field label="Description"><textarea name="description" rows={3} required className={inputClass} placeholder="What happened and what needs to be done?" /></Field>
-              <div className="grid grid-cols-2 gap-3"><Field label="Unit"><input name="unit" className={inputClass} placeholder="Unit A" /></Field><Field label="Tenant"><input name="tenantName" className={inputClass} placeholder="Tenant name" /></Field></div>
-              <div className="grid grid-cols-2 gap-3"><Field label="Priority"><select name="priority" className={inputClass}><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select></Field><Field label="Status"><select name="status" className={inputClass}><option value="open">Open</option><option value="in-progress">In progress</option><option value="resolved">Resolved</option></select></Field></div>
-              <div className="grid grid-cols-2 gap-3"><Field label="Date"><input name="date" required className={inputClass} placeholder="May 29, 2026" /></Field><Field label="Vendor"><input name="vendor" className={inputClass} placeholder="Optional" /></Field></div>
+              <Field label="Title"><input name="title" required defaultValue={(item as MaintenanceItem | null)?.title || ""} className={inputClass} placeholder="Garbage disposal jammed" /></Field>
+              <Field label="Description"><textarea name="description" rows={3} required defaultValue={(item as MaintenanceItem | null)?.description || ""} className={inputClass} placeholder="What happened and what needs to be done?" /></Field>
+              <div className="grid grid-cols-2 gap-3"><Field label="Unit"><input name="unit" defaultValue={(item as MaintenanceItem | null)?.unit || ""} className={inputClass} placeholder="Unit A" /></Field><Field label="Tenant"><input name="tenantName" defaultValue={(item as MaintenanceItem | null)?.tenantName || ""} className={inputClass} placeholder="Tenant name" /></Field></div>
+              <div className="grid grid-cols-2 gap-3"><Field label="Priority"><select name="priority" defaultValue={(item as MaintenanceItem | null)?.priority || "medium"} className={inputClass}><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select></Field><Field label="Status"><select name="status" defaultValue={(item as MaintenanceItem | null)?.status || "open"} className={inputClass}><option value="open">Open</option><option value="in-progress">In progress</option><option value="resolved">Resolved</option></select></Field></div>
+              <div className="grid grid-cols-2 gap-3"><Field label="Date"><input name="date" required defaultValue={(item as MaintenanceItem | null)?.date || ""} className={inputClass} placeholder="May 29, 2026" /></Field><Field label="Vendor"><input name="vendor" defaultValue={(item as MaintenanceItem | null)?.vendor || ""} className={inputClass} placeholder="Optional" /></Field></div>
             </>
           )}
 
           {kind === "task" && (
             <>
-              <Field label="Task"><input name="title" required className={inputClass} placeholder="Send renewal offer" /></Field>
-              <div className="grid grid-cols-2 gap-3"><Field label="Type"><select name="type" className={inputClass}><option value="lease">Lease</option><option value="inspection">Inspection</option><option value="maintenance">Maintenance</option><option value="financial">Financial</option><option value="reminder">Reminder</option></select></Field><Field label="Priority"><select name="priority" className={inputClass}><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select></Field></div>
-              <Field label="Due date"><input name="dueDate" required className={inputClass} placeholder="Jun 15, 2026" /></Field>
+              <Field label="Task"><input name="title" required defaultValue={(item as TaskItem | null)?.title || ""} className={inputClass} placeholder="Send renewal offer" /></Field>
+              <div className="grid grid-cols-2 gap-3"><Field label="Type"><select name="type" defaultValue={(item as TaskItem | null)?.type || "reminder"} className={inputClass}><option value="lease">Lease</option><option value="inspection">Inspection</option><option value="maintenance">Maintenance</option><option value="financial">Financial</option><option value="reminder">Reminder</option></select></Field><Field label="Priority"><select name="priority" defaultValue={(item as TaskItem | null)?.priority || "medium"} className={inputClass}><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select></Field></div>
+              <Field label="Due date"><input name="dueDate" required defaultValue={(item as TaskItem | null)?.dueDate || ""} className={inputClass} placeholder="Jun 15, 2026" /></Field>
+              {editing && <Field label="Status"><select name="status" defaultValue={(item as TaskItem | null)?.status || "pending"} className={inputClass}><option value="pending">Pending</option><option value="done">Done</option></select></Field>}
             </>
           )}
 
           {kind === "document" && (
             <>
-              <Field label="Document name"><input name="name" required className={inputClass} placeholder="Lease Agreement - Alex Morgan" /></Field>
-              <div className="grid grid-cols-2 gap-3"><Field label="Type"><select name="type" className={inputClass}><option value="lease">Lease</option><option value="inspection">Inspection</option><option value="warranty">Warranty</option><option value="receipt">Receipt</option><option value="application">Application</option><option value="other">Other</option></select></Field><Field label="Size"><input name="size" className={inputClass} placeholder="320 KB" /></Field></div>
-              <div className="grid grid-cols-2 gap-3"><Field label="Tenant"><input name="tenantName" className={inputClass} placeholder="Optional" /></Field><Field label="Date"><input name="date" required className={inputClass} placeholder="May 29, 2026" /></Field></div>
+              <Field label="Document name"><input name="name" required defaultValue={(item as DocItem | null)?.name || ""} className={inputClass} placeholder="Lease Agreement - Alex Morgan" /></Field>
+              <div className="grid grid-cols-2 gap-3"><Field label="Type"><select name="type" defaultValue={(item as DocItem | null)?.type || "lease"} className={inputClass}><option value="lease">Lease</option><option value="inspection">Inspection</option><option value="warranty">Warranty</option><option value="receipt">Receipt</option><option value="application">Application</option><option value="other">Other</option></select></Field><Field label="Size"><input name="size" defaultValue={(item as DocItem | null)?.size || ""} className={inputClass} placeholder="320 KB" /></Field></div>
+              <div className="grid grid-cols-2 gap-3"><Field label="Tenant"><input name="tenantName" defaultValue={(item as DocItem | null)?.tenantName || ""} className={inputClass} placeholder="Optional" /></Field><Field label="Date"><input name="date" required defaultValue={(item as DocItem | null)?.date || ""} className={inputClass} placeholder="May 29, 2026" /></Field></div>
             </>
           )}
         </div>
 
         <div className="mt-5 flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-black text-muted-foreground">Cancel</button>
-          <button type="submit" className="flex-1 rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white">Save</button>
+          <button type="submit" className="flex-1 rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white">{editing ? "Save changes" : "Save"}</button>
         </div>
       </form>
     </div>
+  );
+}
+
+function AuthShell({ children, eyebrow, title, subtitle }: { children: React.ReactNode; eyebrow: string; title: string; subtitle: string }) {
+  return (
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[0.9fr_1.1fr]">
+      <section className="hidden bg-[#1A3352] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+        <div>
+          <div className="mb-10 flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Home className="h-5 w-5" /></div>
+            <span className="text-lg font-black tracking-[-0.03em]">Keystone</span>
+          </div>
+          <h1 className="max-w-md text-4xl font-black leading-tight tracking-[-0.05em]">Your rental data, tied to your account.</h1>
+          <p className="mt-4 max-w-sm text-sm leading-6 text-white/68">Sign in on your Mac, iPhone, or iPad and keep the same portfolio synced through Supabase.</p>
+        </div>
+        <div className="grid gap-3">
+          {[
+            { label: "Accounts", value: "Email sign-in" },
+            { label: "Database", value: "Cloud synced" },
+            { label: "Security", value: "Row-level policies" },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+              <span className="text-sm font-bold text-white/75">{item.label}</span>
+              <span className="text-sm font-black">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <main className="flex min-h-screen items-center justify-center px-4 py-8">
+        <div className="w-full max-w-[440px]">
+          <div className="mb-6 flex items-center gap-2 lg:hidden">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1A3352] text-white"><Home className="h-4 w-4" /></div>
+            <span className="font-black tracking-[-0.03em] text-foreground">Keystone</span>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{eyebrow}</p>
+            <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">{title}</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{subtitle}</p>
+            {children}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function CloudSetupScreen() {
+  return (
+    <AuthShell
+      eyebrow="Cloud setup required"
+      title="Connect Supabase before public beta signups."
+      subtitle="The app is account-gated now. Add your Supabase project URL and anon key, then run the included SQL schema."
+    >
+      <div className="mt-6 space-y-3">
+        <div className="rounded-xl border border-border bg-background p-4">
+          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">1. Environment</p>
+          <pre className="mt-2 overflow-x-auto rounded-lg bg-[#0D1422] p-3 text-xs leading-5 text-white">{`VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-anon-key`}</pre>
+        </div>
+        <div className="rounded-xl border border-border bg-background p-4">
+          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">2. Database</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Run <span className="font-black text-foreground">supabase/schema.sql</span> in the Supabase SQL editor to create the secured portfolio table.</p>
+        </div>
+      </div>
+    </AuthShell>
+  );
+}
+
+function AuthScreen() {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = mode === "signin"
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password });
+
+      if (result.error) throw result.error;
+      setMessage(mode === "signin" ? "Signed in. Loading your portfolio..." : "Account created. Check your email if confirmation is enabled.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Authentication failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AuthShell
+      eyebrow={mode === "signin" ? "Welcome back" : "Create account"}
+      title={mode === "signin" ? "Sign in to Keystone." : "Start your Keystone account."}
+      subtitle="Your portfolio syncs to the cloud after you sign in."
+    >
+      <form onSubmit={submit} className="mt-6 space-y-3">
+        <Field label="Email"><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required className={inputClass} placeholder="you@email.com" /></Field>
+        <Field label="Password"><input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required minLength={6} className={inputClass} placeholder="At least 6 characters" /></Field>
+        {message && <p className="rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">{message}</p>}
+        <button disabled={busy} className="w-full rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white transition-all disabled:opacity-50">
+          {busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
+        </button>
+      </form>
+      <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="mt-4 w-full text-center text-xs font-black text-[#1A3352]">
+        {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
+      </button>
+    </AuthShell>
   );
 }
 
@@ -978,35 +1206,170 @@ export default function App() {
   const [data, setData] = useStoredData();
   const [profile, setProfile] = useStoredProfile();
   const [onboarded, setOnboarded] = useState(() => localStorage.getItem("keystone-onboarding-complete") === "true");
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState("Local data");
   const [tab, setTab] = useState<Tab>("dashboard");
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
+  const [editRecord, setEditRecord] = useState<EditableRecord>(null);
 
   const badge = data.maintenance.filter((m) => m.priority === "high" && m.status !== "resolved").length + data.tenants.filter((t) => t.status === "expiring" || t.status === "expired").length;
+  const serializedData = JSON.stringify(data);
+  const serializedProfile = JSON.stringify(profile);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    supabase.auth.getSession().then(({ data: authData }) => {
+      if (!mounted) return;
+      setSession(authData.session);
+      setAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+      if (!nextSession) {
+        setCloudReady(false);
+        setCloudStatus("Signed out");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user.id) return;
+
+    let cancelled = false;
+    setCloudLoading(true);
+    setCloudStatus("Loading cloud data...");
+
+    loadCloudPortfolio(session.user.id)
+      .then((portfolio) => {
+        if (cancelled) return;
+        if (portfolio) {
+          if (portfolio.profile) setProfile({ ...DEFAULT_PROFILE, ...portfolio.profile });
+          if (portfolio.data) setData({ ...INITIAL_DATA, ...portfolio.data });
+          setOnboarded(Boolean(portfolio.onboarded));
+          localStorage.setItem("keystone-onboarding-complete", String(Boolean(portfolio.onboarded)));
+        } else {
+          setOnboarded(false);
+          localStorage.removeItem("keystone-onboarding-complete");
+        }
+        setCloudReady(true);
+        setCloudStatus("Cloud synced");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setCloudStatus(error instanceof Error ? error.message : "Cloud load failed");
+      })
+      .finally(() => {
+        if (!cancelled) setCloudLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    if (!session?.user.id || !cloudReady) return;
+
+    setCloudStatus("Saving...");
+    const timer = window.setTimeout(() => {
+      saveCloudPortfolio(session.user.id, profile, data, onboarded)
+        .then(() => setCloudStatus("Cloud synced"))
+        .catch((error) => setCloudStatus(error instanceof Error ? error.message : "Cloud save failed"));
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [session?.user.id, cloudReady, serializedData, serializedProfile, onboarded]);
 
   function navigate(next: Tab) {
     setTab(next);
     if (next !== "properties") setSelectedProperty(null);
   }
 
-  function save(kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>) {
+  function openAdd(kind: Exclude<ModalKind, null>) {
+    setEditRecord(null);
+    setModal(kind);
+  }
+
+  function openEdit(record: Exclude<EditableRecord, null>) {
+    setEditRecord(record);
+    setModal(record.kind);
+  }
+
+  function closeModal() {
+    setModal(null);
+    setEditRecord(null);
+  }
+
+  function save(kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editing: EditableRecord) {
     setData((current) => {
       if (kind === "property") {
-        const imageUrl = String(payload.imageUrl || "").trim() || DEFAULT_IMAGES[current.properties.length % DEFAULT_IMAGES.length];
-        return { ...current, properties: [...current.properties, { id: uid("p"), name: String(payload.name), address: String(payload.address), city: String(payload.city), units: Number(payload.units || 1), imageUrl }] };
+        const previous = editing?.kind === "property" ? editing.item : null;
+        const imageUrl = String(payload.imageUrl || "").trim() || previous?.imageUrl || DEFAULT_IMAGES[current.properties.length % DEFAULT_IMAGES.length];
+        const nextProperty = { id: previous?.id || uid("p"), name: String(payload.name), address: String(payload.address), city: String(payload.city), units: Number(payload.units || 1), imageUrl };
+        return { ...current, properties: previous ? current.properties.map((property) => property.id === previous.id ? nextProperty : property) : [...current.properties, nextProperty] };
       }
       if (kind === "tenant") {
-        return { ...current, tenants: [...current.tenants, { id: uid("t"), name: String(payload.name), phone: String(payload.phone || ""), email: String(payload.email || ""), propertyId: String(payload.propertyId), unit: String(payload.unit), rent: Number(payload.rent || 0), leaseStart: String(payload.leaseStart), leaseEnd: String(payload.leaseEnd), status: payload.status as Tenant["status"], notes: String(payload.notes || "") }] };
+        const previous = editing?.kind === "tenant" ? editing.item : null;
+        const nextTenant = { id: previous?.id || uid("t"), name: String(payload.name), phone: String(payload.phone || ""), email: String(payload.email || ""), propertyId: String(payload.propertyId), unit: String(payload.unit), rent: Number(payload.rent || 0), leaseStart: String(payload.leaseStart), leaseEnd: String(payload.leaseEnd), status: payload.status as Tenant["status"], notes: String(payload.notes || "") };
+        return { ...current, tenants: previous ? current.tenants.map((tenant) => tenant.id === previous.id ? nextTenant : tenant) : [...current.tenants, nextTenant] };
       }
       if (kind === "maintenance") {
-        return { ...current, maintenance: [...current.maintenance, { id: uid("m"), title: String(payload.title), description: String(payload.description), propertyId: String(payload.propertyId), unit: String(payload.unit || ""), tenantName: String(payload.tenantName || ""), status: payload.status as MaintenanceItem["status"], priority: payload.priority as MaintenanceItem["priority"], date: String(payload.date), vendor: String(payload.vendor || "") }] };
+        const previous = editing?.kind === "maintenance" ? editing.item : null;
+        const nextMaintenance = { id: previous?.id || uid("m"), title: String(payload.title), description: String(payload.description), propertyId: String(payload.propertyId), unit: String(payload.unit || ""), tenantName: String(payload.tenantName || ""), status: payload.status as MaintenanceItem["status"], priority: payload.priority as MaintenanceItem["priority"], date: String(payload.date), vendor: String(payload.vendor || "") };
+        return { ...current, maintenance: previous ? current.maintenance.map((item) => item.id === previous.id ? nextMaintenance : item) : [...current.maintenance, nextMaintenance] };
       }
       if (kind === "task") {
-        return { ...current, tasks: [...current.tasks, { id: uid("tk"), title: String(payload.title), type: payload.type as TaskItem["type"], propertyId: String(payload.propertyId || ""), dueDate: String(payload.dueDate), status: "pending", priority: payload.priority as TaskItem["priority"] }] };
+        const previous = editing?.kind === "task" ? editing.item : null;
+        const nextTask = { id: previous?.id || uid("tk"), title: String(payload.title), type: payload.type as TaskItem["type"], propertyId: String(payload.propertyId || ""), dueDate: String(payload.dueDate), status: (payload.status || previous?.status || "pending") as TaskItem["status"], priority: payload.priority as TaskItem["priority"] };
+        return { ...current, tasks: previous ? current.tasks.map((task) => task.id === previous.id ? nextTask : task) : [...current.tasks, nextTask] };
       }
-      return { ...current, docs: [...current.docs, { id: uid("d"), name: String(payload.name), type: payload.type as DocItem["type"], propertyId: String(payload.propertyId), tenantName: String(payload.tenantName || ""), date: String(payload.date), size: String(payload.size || "0 KB") }] };
+      const previous = editing?.kind === "document" ? editing.item : null;
+      const nextDoc = { id: previous?.id || uid("d"), name: String(payload.name), type: payload.type as DocItem["type"], propertyId: String(payload.propertyId), tenantName: String(payload.tenantName || ""), date: String(payload.date), size: String(payload.size || "0 KB") };
+      return { ...current, docs: previous ? current.docs.map((doc) => doc.id === previous.id ? nextDoc : doc) : [...current.docs, nextDoc] };
     });
-    setModal(null);
+    closeModal();
+  }
+
+  function deleteRecord(kind: Exclude<ModalKind, null>, id: string) {
+    const labels = { property: "property", tenant: "tenant", maintenance: "maintenance request", task: "task", document: "document" };
+    if (!window.confirm(`Delete this ${labels[kind]}? This cannot be undone.`)) return;
+
+    setData((current) => {
+      if (kind === "property") {
+        return {
+          ...current,
+          properties: current.properties.filter((property) => property.id !== id),
+          tenants: current.tenants.filter((tenant) => tenant.propertyId !== id),
+          maintenance: current.maintenance.filter((item) => item.propertyId !== id),
+          docs: current.docs.filter((doc) => doc.propertyId !== id),
+          tasks: current.tasks.map((task) => task.propertyId === id ? { ...task, propertyId: "" } : task),
+        };
+      }
+      if (kind === "tenant") return { ...current, tenants: current.tenants.filter((tenant) => tenant.id !== id) };
+      if (kind === "maintenance") return { ...current, maintenance: current.maintenance.filter((item) => item.id !== id) };
+      if (kind === "task") return { ...current, tasks: current.tasks.filter((task) => task.id !== id) };
+      return { ...current, docs: current.docs.filter((doc) => doc.id !== id) };
+    });
+
+    if (kind === "property" && selectedProperty === id) {
+      setSelectedProperty(null);
+    }
   }
 
   function updateMaintenance(id: string, status: MaintenanceItem["status"]) {
@@ -1059,6 +1422,12 @@ export default function App() {
     setOnboarded(false);
   }
 
+  async function signOut() {
+    await supabase?.auth.signOut();
+    setSession(null);
+    setCloudReady(false);
+  }
+
   function exportData() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1073,14 +1442,62 @@ export default function App() {
     if (tab === "dashboard") return <Dashboard data={data} profile={profile} onNav={navigate} />;
     if (tab === "properties") {
       return selectedProperty ? (
-        <PropertyDetail data={data} propertyId={selectedProperty} onBack={() => setSelectedProperty(null)} onAddTenant={() => setModal("tenant")} onAddMaintenance={() => setModal("maintenance")} onAddDocument={() => setModal("document")} updateMaintenance={updateMaintenance} />
+        <PropertyDetail
+          data={data}
+          propertyId={selectedProperty}
+          onBack={() => setSelectedProperty(null)}
+          onAddTenant={() => openAdd("tenant")}
+          onAddMaintenance={() => openAdd("maintenance")}
+          onAddDocument={() => openAdd("document")}
+          onEditProperty={(property) => openEdit({ kind: "property", item: property })}
+          onDeleteProperty={(id) => deleteRecord("property", id)}
+          onEditTenant={(tenant) => openEdit({ kind: "tenant", item: tenant })}
+          onDeleteTenant={(id) => deleteRecord("tenant", id)}
+          onEditMaintenance={(item) => openEdit({ kind: "maintenance", item })}
+          onDeleteMaintenance={(id) => deleteRecord("maintenance", id)}
+          onEditDocument={(doc) => openEdit({ kind: "document", item: doc })}
+          onDeleteDocument={(id) => deleteRecord("document", id)}
+          updateMaintenance={updateMaintenance}
+        />
       ) : (
-        <PropertiesList data={data} onSelect={setSelectedProperty} onAdd={() => setModal("property")} />
+        <PropertiesList data={data} onSelect={setSelectedProperty} onAdd={() => openAdd("property")} onEdit={(property) => openEdit({ kind: "property", item: property })} onDelete={(id) => deleteRecord("property", id)} />
       );
     }
-    if (tab === "tasks") return <Tasks data={data} onAdd={() => setModal("task")} toggleTask={toggleTask} />;
-    if (tab === "documents") return <Documents data={data} onAdd={() => setModal("document")} />;
-    return <SettingsScreen data={data} profile={profile} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} />;
+    if (tab === "tasks") return <Tasks data={data} onAdd={() => openAdd("task")} onEdit={(task) => openEdit({ kind: "task", item: task })} onDelete={(id) => deleteRecord("task", id)} toggleTask={toggleTask} />;
+    if (tab === "documents") return <Documents data={data} onAdd={() => openAdd("document")} onEdit={(doc) => openEdit({ kind: "document", item: doc })} onDelete={(id) => deleteRecord("document", id)} />;
+    return <SettingsScreen data={data} profile={profile} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} onSignOut={signOut} />;
+  }
+
+  if (!supabase) {
+    return <CloudSetupScreen />;
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+          <Home className="mx-auto mb-3 h-8 w-8 text-[#1A3352]" />
+          <p className="text-sm font-black text-foreground">Loading Keystone...</p>
+          <p className="mt-1 text-xs text-muted-foreground">Checking your account session.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
+  if (cloudLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+          <Shield className="mx-auto mb-3 h-8 w-8 text-[#0D9488]" />
+          <p className="text-sm font-black text-foreground">Loading your portfolio...</p>
+          <p className="mt-1 text-xs text-muted-foreground">{cloudStatus}</p>
+        </div>
+      </div>
+    );
   }
 
   if (!onboarded) {
@@ -1091,10 +1508,15 @@ export default function App() {
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar active={tab} onChange={navigate} badge={badge} profile={profile} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto">{renderContent()}</main>
+        <main className="flex-1 overflow-y-auto">
+          <div className="border-b border-border bg-card px-4 py-2 text-center text-[11px] font-bold text-muted-foreground lg:text-left">
+            {cloudStatus}
+          </div>
+          {renderContent()}
+        </main>
         <BottomNav active={tab} onChange={navigate} badge={badge} />
       </div>
-      <AppModal kind={modal} data={data} selectedProperty={selectedProperty} onClose={() => setModal(null)} onSave={save} />
+      <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} onClose={closeModal} onSave={save} />
     </div>
   );
 }

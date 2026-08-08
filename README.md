@@ -1,11 +1,52 @@
+# Home Harbor
 
-  # Mobile Rental Management App
+Mobile-first rental management app for properties, tenants, maintenance, tasks, and documents.
 
-  This is a code bundle for Mobile Rental Management App. The original project is available at https://www.figma.com/design/nW5gHfPep1Q6ojxaBP7reD/Mobile-Rental-Management-App.
+## Local Setup
 
-  ## Running the code
+Install dependencies:
 
-  Run `npm i` to install the dependencies.
+```bash
+npm install
+```
 
-  Run `npm run dev` to start the development server.
-  
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Build for production:
+
+```bash
+npm run build
+```
+
+## Supabase Accounts + Cloud Database
+
+The app is wired for Supabase email/password accounts and a cloud portfolio table.
+
+1. Create a Supabase project.
+2. Copy `.env.example` to `.env`.
+3. Add your project URL and anon key:
+
+```bash
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-anon-key
+```
+
+4. Open the Supabase SQL editor.
+5. Run `supabase/schema.sql`.
+6. Restart the dev server.
+
+Each signed-in user gets one private `user_portfolios` row protected by row-level security. The current app stores the profile, onboarding state, and rental portfolio data in that row.
+
+## Current Cloud Model
+
+The beta foundation uses a single JSON portfolio record per user:
+
+- `profile`: name, email, portfolio name
+- `data`: properties, tenants, maintenance, tasks, documents
+- `onboarded`: first-run setup status
+
+This is fast for beta setup. As the product grows, the next step is splitting those JSON sections into relational tables for properties, tenants, leases, documents, and maintenance events.
