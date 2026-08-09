@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createClient, type Session } from "@supabase/supabase-js";
+import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
-  ArrowLeft,
   BarChart3,
   Bell,
   Building2,
@@ -25,7 +24,6 @@ import {
   Pencil,
   Plus,
   RefreshCcw,
-  Search,
   Settings,
   Shield,
   Scale,
@@ -36,179 +34,60 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-
-type Tab = "dashboard" | "properties" | "tasks" | "documents" | "settings";
-type ModalKind = "property" | "tenant" | "maintenance" | "task" | "document" | null;
-type EditableRecord =
-  | { kind: "property"; item: Property }
-  | { kind: "tenant"; item: Tenant }
-  | { kind: "maintenance"; item: MaintenanceItem }
-  | { kind: "task"; item: TaskItem }
-  | { kind: "document"; item: DocItem }
-  | null;
-
-interface Property {
-  id: string;
-  name: string;
-  address: string;
-  city: string;
-  units: number;
-  imageUrl: string;
-}
-
-interface Tenant {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  propertyId: string;
-  unit: string;
-  rent: number;
-  leaseStart: string;
-  leaseEnd: string;
-  status: "active" | "expiring" | "expired";
-  notes: string;
-}
-
-interface MaintenanceItem {
-  id: string;
-  title: string;
-  description: string;
-  propertyId: string;
-  unit: string;
-  tenantName: string;
-  status: "open" | "in-progress" | "resolved";
-  priority: "low" | "medium" | "high";
-  date: string;
-  vendor: string;
-}
-
-interface TaskItem {
-  id: string;
-  title: string;
-  type: "lease" | "inspection" | "maintenance" | "financial" | "reminder";
-  propertyId: string;
-  dueDate: string;
-  status: "pending" | "done";
-  priority: "low" | "medium" | "high";
-}
-
-interface DocItem {
-  id: string;
-  name: string;
-  type: "lease" | "inspection" | "warranty" | "receipt" | "application" | "other";
-  propertyId: string;
-  tenantName: string;
-  date: string;
-  size: string;
-  fileName?: string;
-  filePath?: string;
-  mimeType?: string;
-  uploadedAt?: string;
-}
-
-interface AppData {
-  properties: Property[];
-  tenants: Tenant[];
-  maintenance: MaintenanceItem[];
-  tasks: TaskItem[];
-  docs: DocItem[];
-}
-
-interface AppProfile {
-  name: string;
-  email: string;
-  portfolioName: string;
-}
-
-interface OnboardingSetup {
-  profile: AppProfile;
-  mode: "sample" | "fresh";
-  property?: {
-    name: string;
-    address: string;
-    city: string;
-    units: number;
-  };
-}
-
-interface ReminderItem {
-  id: string;
-  title: string;
-  detail: string;
-  severity: "high" | "medium" | "low";
-  tab: Tab;
-}
-
-interface FeedbackItem {
-  type: "bug" | "idea" | "question" | "other";
-  message: string;
-  email?: string;
-  page?: string;
-}
-
-interface AnalyticsSummary {
-  totalEvents: number;
-  lastEventAt: string | null;
-  topEvents: { name: string; count: number }[];
-}
-
-const DEFAULT_PROFILE: AppProfile = {
-  name: "David Martinez",
-  email: "david.martinez@email.com",
-  portfolioName: "Rental portfolio",
-};
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-
-const DEFAULT_IMAGES = [
-  "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900&h=520&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=900&h=520&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=900&h=520&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=900&h=520&fit=crop&auto=format",
-];
-
-const INITIAL_DATA: AppData = {
-  properties: [
-    { id: "p1", name: "Maple Street Duplex", address: "2847 Maple Street", city: "Oakland, CA 94602", units: 2, imageUrl: DEFAULT_IMAGES[0] },
-    { id: "p2", name: "Pine Avenue Triplex", address: "1203 Pine Avenue", city: "Oakland, CA 94607", units: 3, imageUrl: DEFAULT_IMAGES[1] },
-    { id: "p3", name: "Oak Court Single", address: "519 Oak Court", city: "Berkeley, CA 94710", units: 1, imageUrl: DEFAULT_IMAGES[2] },
-    { id: "p4", name: "Elm Street Fourplex", address: "7744 Elm Street", city: "Berkeley, CA 94703", units: 4, imageUrl: DEFAULT_IMAGES[3] },
-  ],
-  tenants: [
-    { id: "t1", name: "Sarah Chen", phone: "(510) 442-8831", email: "sarah.chen@gmail.com", propertyId: "p1", unit: "Unit 1A", rent: 2100, leaseStart: "Sep 1, 2024", leaseEnd: "Aug 31, 2026", status: "active", notes: "Excellent tenant. Always pays early. Prefers email." },
-    { id: "t2", name: "Marcus Williams", phone: "(510) 882-3310", email: "m.williams@outlook.com", propertyId: "p1", unit: "Unit 1B", rent: 1950, leaseStart: "Jan 1, 2025", leaseEnd: "Dec 31, 2026", status: "active", notes: "Works nights - avoid calls before noon." },
-    { id: "t3", name: "Priya Nair", phone: "(510) 774-5562", email: "priya.nair@icloud.com", propertyId: "p2", unit: "Unit A", rent: 1850, leaseStart: "Jul 1, 2024", leaseEnd: "Jun 30, 2026", status: "expiring", notes: "Renewal conversation needed. Interested in staying." },
-    { id: "t4", name: "James & Tomoko Sato", phone: "(510) 993-7128", email: "jsato@gmail.com", propertyId: "p2", unit: "Unit B", rent: 2250, leaseStart: "Dec 1, 2024", leaseEnd: "Nov 30, 2026", status: "active", notes: "Very tidy. No pets." },
-    { id: "t5", name: "Diana Reyes", phone: "(510) 341-9004", email: "diana.reyes@gmail.com", propertyId: "p3", unit: "Unit 1", rent: 2400, leaseStart: "Oct 1, 2024", leaseEnd: "Sep 30, 2026", status: "active", notes: "Very responsive via text." },
-    { id: "t6", name: "Leon Okeke", phone: "(510) 671-2240", email: "leon.okeke@yahoo.com", propertyId: "p4", unit: "Unit 1A", rent: 1750, leaseStart: "Apr 1, 2025", leaseEnd: "Mar 31, 2027", status: "active", notes: "Very reliable." },
-    { id: "t7", name: "Hannah Park", phone: "(510) 557-8874", email: "h.park@gmail.com", propertyId: "p4", unit: "Unit 2A", rent: 1800, leaseStart: "Aug 1, 2024", leaseEnd: "Jul 31, 2026", status: "expiring", notes: "Reported noise from upstairs." },
-    { id: "t8", name: "Robert & Ana Kim", phone: "(510) 240-3391", email: "rkim@gmail.com", propertyId: "p4", unit: "Unit 2B", rent: 1800, leaseStart: "Nov 1, 2024", leaseEnd: "Oct 31, 2026", status: "active", notes: "Couple with infant." },
-  ],
-  maintenance: [
-    { id: "m1", title: "Heater not working", description: "Wall heater in living room stopped working. Tenant called twice.", propertyId: "p2", unit: "Unit A", tenantName: "Priya Nair", status: "open", priority: "high", date: "May 2, 2026", vendor: "" },
-    { id: "m2", title: "Leaky bathroom faucet", description: "Hot water faucet drips constantly.", propertyId: "p1", unit: "Unit 1B", tenantName: "Marcus Williams", status: "in-progress", priority: "medium", date: "May 8, 2026", vendor: "Ace Plumbing" },
-    { id: "m3", title: "Torn window screen", description: "Back bedroom screen is torn. Needs replacement before summer.", propertyId: "p3", unit: "Unit 1", tenantName: "Diana Reyes", status: "open", priority: "low", date: "May 10, 2026", vendor: "" },
-    { id: "m4", title: "Dishwasher not draining", description: "Clog in drain hose. Resolved.", propertyId: "p4", unit: "Unit 2A", tenantName: "Hannah Park", status: "resolved", priority: "high", date: "Apr 28, 2026", vendor: "QuickFix Appliance" },
-  ],
-  tasks: [
-    { id: "tk1", title: "Renew lease - Priya Nair", type: "lease", propertyId: "p2", dueDate: "Jun 15, 2026", status: "pending", priority: "high" },
-    { id: "tk2", title: "Renew lease - Hannah Park", type: "lease", propertyId: "p4", dueDate: "Jun 30, 2026", status: "pending", priority: "high" },
-    { id: "tk3", title: "Annual safety inspection", type: "inspection", propertyId: "p1", dueDate: "May 20, 2026", status: "pending", priority: "medium" },
-    { id: "tk4", title: "Replace HVAC filters - all properties", type: "maintenance", propertyId: "", dueDate: "May 25, 2026", status: "pending", priority: "medium" },
-    { id: "tk5", title: "Property insurance renewal", type: "financial", propertyId: "p4", dueDate: "Jun 1, 2026", status: "pending", priority: "high" },
-    { id: "tk6", title: "Rent increase notice - Unit A", type: "reminder", propertyId: "p2", dueDate: "May 30, 2026", status: "pending", priority: "low" },
-  ],
-  docs: [
-    { id: "d1", name: "Lease Agreement - Sarah Chen", type: "lease", propertyId: "p1", tenantName: "Sarah Chen", date: "Sep 1, 2024", size: "284 KB" },
-    { id: "d2", name: "Lease Agreement - Marcus Williams", type: "lease", propertyId: "p1", tenantName: "Marcus Williams", date: "Jan 1, 2025", size: "291 KB" },
-    { id: "d3", name: "Lease Agreement - Priya Nair", type: "lease", propertyId: "p2", tenantName: "Priya Nair", date: "Jul 1, 2024", size: "278 KB" },
-    { id: "d4", name: "Move-in Inspection - Diana Reyes", type: "inspection", propertyId: "p3", tenantName: "Diana Reyes", date: "Oct 1, 2024", size: "1.2 MB" },
-    { id: "d5", name: "HVAC Service Report", type: "receipt", propertyId: "p1", tenantName: "", date: "Mar 15, 2025", size: "412 KB" },
-  ],
-};
+import { AppShell } from "./components/app-shell";
+import {
+  AddButton,
+  Button,
+  Chip,
+  DocumentCard,
+  EmptyState,
+  IconAction,
+  PageHeader,
+  PropertyCard,
+  QuickAction,
+  SearchAndFilterBar,
+  SkeletonLoader,
+  StatusBadge,
+  StatusCard,
+  TaskCard,
+} from "./components/home-harbor-ui";
+import { DEFAULT_IMAGES, DEFAULT_PROFILE, INITIAL_DATA } from "./data";
+import {
+  loadAnalyticsSummary,
+  loadCloudPortfolio,
+  openDocumentFile,
+  recordAnalyticsEvent,
+  saveCloudPortfolio,
+  submitFeedback,
+  supabase,
+  uploadDocumentFile,
+} from "./services";
+import type {
+  AnalyticsSummary,
+  AppData,
+  AppProfile,
+  DocItem,
+  EditableRecord,
+  MaintenanceItem,
+  ModalKind,
+  OnboardingSetup,
+  Property,
+  ReminderItem,
+  Tab,
+  TaskItem,
+  Tenant,
+} from "./types";
+import {
+  buildReminders,
+  docColor,
+  fileSizeLabel,
+  formatToday,
+  money,
+  priorityStyle,
+  propertyName,
+  propertyStats,
+  uid,
+} from "./utils";
 
 function useStoredData() {
   const [data, setDataState] = useState<AppData>(() => {
@@ -249,633 +128,9 @@ function useStoredProfile() {
   return [profile, setProfile] as const;
 }
 
-async function loadCloudPortfolio(userId: string) {
-  if (!supabase) throw new Error("Supabase is not configured.");
-
-  const { data, error } = await supabase
-    .from("user_portfolios")
-    .select("profile,data,onboarded")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data as { profile: AppProfile | null; data: AppData | null; onboarded: boolean | null } | null;
-}
-
-async function saveCloudPortfolio(userId: string, profile: AppProfile, data: AppData, onboarded: boolean) {
-  if (!supabase) return;
-
-  const { error } = await supabase
-    .from("user_portfolios")
-    .upsert({
-      user_id: userId,
-      profile,
-      data,
-      onboarded,
-    }, { onConflict: "user_id" });
-
-  if (error) throw error;
-}
-
-async function uploadDocumentFile(userId: string, file: File, documentId: string) {
-  if (!supabase) throw new Error("Supabase is not configured.");
-
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-  const path = `${userId}/${documentId}/${Date.now()}-${safeName}`;
-  const { error } = await supabase.storage.from("documents").upload(path, file, {
-    cacheControl: "3600",
-    upsert: true,
-  });
-
-  if (error) throw error;
-  return path;
-}
-
-async function openDocumentFile(filePath: string) {
-  if (!supabase) return;
-
-  const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-  if (error) throw error;
-
-  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-}
-
-async function submitFeedback(userId: string, feedback: FeedbackItem) {
-  if (!supabase) throw new Error("Supabase is not configured.");
-
-  const { error } = await supabase.from("feedback").insert({
-    user_id: userId,
-    type: feedback.type,
-    message: feedback.message,
-    email: feedback.email || null,
-    page: feedback.page || null,
-    user_agent: navigator.userAgent,
-  });
-
-  if (error) throw error;
-}
-
-async function recordAnalyticsEvent(userId: string | undefined, eventName: string, metadata: Record<string, unknown> = {}) {
-  if (!supabase || !userId || localStorage.getItem("home-harbor-analytics-enabled") === "false") return;
-
-  await supabase.from("analytics_events").insert({
-    user_id: userId,
-    event_name: eventName,
-    metadata,
-    path: window.location.pathname,
-    user_agent: navigator.userAgent,
-  });
-}
-
-async function loadAnalyticsSummary(userId: string): Promise<AnalyticsSummary> {
-  if (!supabase) throw new Error("Supabase is not configured.");
-
-  const { data, error } = await supabase
-    .from("analytics_events")
-    .select("event_name,created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(250);
-
-  if (error) throw error;
-
-  const counts = new Map<string, number>();
-  for (const event of data || []) counts.set(event.event_name, (counts.get(event.event_name) || 0) + 1);
-
-  return {
-    totalEvents: data?.length || 0,
-    lastEventAt: data?.[0]?.created_at || null,
-    topEvents: [...counts.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5),
-  };
-}
-
-function uid(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function money(n: number) {
-  return "$" + n.toLocaleString();
-}
-
-function propertyName(data: AppData, id: string) {
-  return data.properties.find((p) => p.id === id)?.name || "All properties";
-}
-
-function propertyStats(data: AppData, propertyId: string) {
-  const property = data.properties.find((p) => p.id === propertyId);
-  const tenants = data.tenants.filter((t) => t.propertyId === propertyId);
-  const occupiedUnits = Math.min(tenants.length, property?.units || tenants.length);
-  const revenue = tenants.reduce((sum, t) => sum + Number(t.rent || 0), 0);
-  return { tenants, occupiedUnits, revenue };
-}
-
-function parseAppDate(value: string) {
-  const time = Date.parse(value);
-  return Number.isNaN(time) ? null : new Date(time);
-}
-
-function daysUntil(value: string) {
-  const parsed = parseAppDate(value);
-  if (!parsed) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  parsed.setHours(0, 0, 0, 0);
-  return Math.ceil((parsed.getTime() - today.getTime()) / 86400000);
-}
-
-function formatReminderTiming(days: number | null) {
-  if (days === null) return "No date";
-  if (days < 0) return `${Math.abs(days)}d overdue`;
-  if (days === 0) return "Due today";
-  if (days === 1) return "Due tomorrow";
-  return `Due in ${days}d`;
-}
-
-function formatToday() {
-  return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date());
-}
-
-function dueTone(days: number | null, done = false) {
-  if (done) return "complete";
-  if (days !== null && days < 0) return "overdue";
-  if (days !== null && days <= 7) return "soon";
-  return "normal";
-}
-
-function dueLabel(value: string, done = false) {
-  if (done) return "Complete";
-  const days = daysUntil(value);
-  if (days === null) return value;
-  if (days < 0) return "Overdue";
-  if (days === 0) return "Due today";
-  if (days === 1) return "Due tomorrow";
-  if (days <= 7) return "Due soon";
-  return value;
-}
-
-function buildReminders(data: AppData): ReminderItem[] {
-  const maintenance = data.maintenance
-    .filter((item) => item.status !== "resolved" && item.priority === "high")
-    .map((item) => ({
-      id: `maintenance-${item.id}`,
-      title: item.title,
-      detail: `${propertyName(data, item.propertyId)} - ${item.unit || "No unit"} - high priority`,
-      severity: "high" as const,
-      tab: "properties" as const,
-    }));
-
-  const tasks = data.tasks
-    .filter((task) => task.status === "pending")
-    .map((task) => ({ task, days: daysUntil(task.dueDate) }))
-    .filter(({ days, task }) => task.priority === "high" || days === null || days <= 14)
-    .map(({ task, days }) => ({
-      id: `task-${task.id}`,
-      title: task.title,
-      detail: `${propertyName(data, task.propertyId)} - ${formatReminderTiming(days)}`,
-      severity: (task.priority === "high" || (days !== null && days <= 0) ? "high" : task.priority) as ReminderItem["severity"],
-      tab: "tasks" as const,
-    }));
-
-  const leases = data.tenants
-    .map((tenant) => ({ tenant, days: daysUntil(tenant.leaseEnd) }))
-    .filter(({ tenant, days }) => tenant.status !== "active" || (days !== null && days <= 60))
-    .map(({ tenant, days }) => ({
-      id: `lease-${tenant.id}`,
-      title: `Lease renewal - ${tenant.name}`,
-      detail: `${propertyName(data, tenant.propertyId)} - ${tenant.unit} - ${formatReminderTiming(days)}`,
-      severity: (tenant.status === "expired" || (days !== null && days <= 14) ? "high" : "medium") as ReminderItem["severity"],
-      tab: "tasks" as const,
-    }));
-
-  return [...maintenance, ...tasks, ...leases].sort((a, b) => {
-    const rank = { high: 0, medium: 1, low: 2 };
-    return rank[a.severity] - rank[b.severity];
-  });
-}
-
-function fileSizeLabel(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function priorityStyle(priority: string) {
-  if (priority === "high") return "bg-red-50 text-red-700 border-red-100";
-  if (priority === "medium") return "bg-amber-50 text-amber-700 border-amber-100";
-  return "bg-slate-100 text-slate-600 border-slate-200";
-}
-
-function statusStyle(status: string) {
-  if (status === "open" || status === "expired") return "bg-red-50 text-red-700 border-red-100";
-  if (status === "in-progress" || status === "expiring") return "bg-amber-50 text-amber-700 border-amber-100";
-  if (status === "resolved" || status === "active" || status === "done") return "bg-teal-50 text-teal-700 border-teal-100";
-  return "bg-slate-100 text-slate-600 border-slate-200";
-}
-
-function docColor(type: DocItem["type"]) {
-  if (type === "lease") return "bg-blue-50 text-blue-600";
-  if (type === "inspection") return "bg-teal-50 text-teal-600";
-  if (type === "warranty") return "bg-purple-50 text-purple-600";
-  if (type === "receipt") return "bg-green-50 text-green-600";
-  if (type === "application") return "bg-orange-50 text-orange-600";
-  return "bg-slate-100 text-slate-600";
-}
-
-function Chip({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold ${className}`}>{children}</span>;
-}
-
-function Button({ children, onClick, type = "button", variant = "primary", disabled = false, className = "" }: { children: React.ReactNode; onClick?: () => void; type?: "button" | "submit"; variant?: "primary" | "secondary" | "ghost" | "danger"; disabled?: boolean; className?: string }) {
-  const variants = {
-    primary: "border-[var(--hh-primary)] bg-[var(--hh-primary)] text-white hover:bg-[var(--hh-primary-hover)]",
-    secondary: "border-border bg-card text-[var(--hh-primary)] hover:border-[var(--hh-primary)]/25 hover:bg-[var(--hh-surface-muted)]",
-    ghost: "border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
-    danger: "border-red-100 bg-red-50 text-red-700 hover:bg-red-100",
-  };
-
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PageHeader({ title, subtitle, action, onBack }: { title: string; subtitle?: string; action?: React.ReactNode; onBack?: () => void }) {
-  return (
-    <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-sm">
-      <div className="flex min-h-[54px] items-center gap-3 px-4 py-3">
-        {onBack && (
-          <button onClick={onBack} className="-ml-1.5 rounded-lg p-1.5 transition-colors hover:bg-muted" aria-label="Go back">
-            <ArrowLeft className="h-5 w-5 text-foreground/60" />
-          </button>
-        )}
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[15px] font-black tracking-[-0.015em] text-foreground">{title}</h1>
-          {subtitle && <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>}
-        </div>
-        {action}
-      </div>
-    </div>
-  );
-}
-
-function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="flex min-h-9 flex-shrink-0 items-center gap-1.5 rounded-lg bg-[var(--hh-primary)] px-3 py-1.5 text-xs font-black text-white transition-all hover:bg-[var(--hh-primary-hover)] active:scale-95">
-      <Plus className="h-3.5 w-3.5" />
-      {label}
-    </button>
-  );
-}
-
-function IconAction({ label, icon: Icon, tone = "neutral", onClick }: { label: string; icon: React.ElementType; tone?: "neutral" | "danger"; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs transition-all hover:shadow-sm ${
-        tone === "danger" ? "border-red-100 bg-red-50 text-red-700" : "border-border bg-card text-muted-foreground hover:text-foreground"
-      }`}
-      aria-label={label}
-      title={label}
-    >
-      <Icon className="h-3.5 w-3.5" />
-    </button>
-  );
-}
-
-function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
-  return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-border bg-card py-2.5 pl-9 pr-4 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-[#1A3352]/40 focus:ring-2 focus:ring-[#1A3352]/20"
-      />
-    </div>
-  );
-}
-
-function Input({ name, value, defaultValue, onChange, type = "text", required, minLength, min, placeholder, className = "" }: { name?: string; value?: string | number; defaultValue?: string | number; onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void; type?: string; required?: boolean; minLength?: number; min?: string | number; placeholder?: string; className?: string }) {
-  return (
-    <input
-      name={name}
-      value={value}
-      defaultValue={defaultValue}
-      onChange={onChange}
-      type={type}
-      required={required}
-      minLength={minLength}
-      min={min}
-      placeholder={placeholder}
-      className={`w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--hh-primary)]/40 focus:ring-2 focus:ring-[var(--hh-primary)]/20 ${className}`}
-    />
-  );
-}
-
-function EmptyState({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle?: string }) {
-  return (
-    <div className="py-14 text-center">
-      <Icon className="mx-auto mb-3 h-9 w-9 text-muted-foreground/30" />
-      <p className="text-sm font-black text-foreground">{title}</p>
-      {subtitle && <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>}
-    </div>
-  );
-}
-
-function SkeletonLoader({ rows = 3 }: { rows?: number }) {
-  return (
-    <div className="space-y-2 px-4 py-4" aria-label="Loading">
-      {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="h-20 animate-pulse rounded-2xl border border-border bg-card p-4">
-          <div className="h-3 w-1/3 rounded-full bg-muted" />
-          <div className="mt-3 h-3 w-3/4 rounded-full bg-muted" />
-          <div className="mt-3 h-2 w-1/2 rounded-full bg-muted" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const label = status === "in-progress" ? "In Progress" : status === "done" ? "Complete" : status === "expiring" ? "Expiring Soon" : status.charAt(0).toUpperCase() + status.slice(1);
-  return <Chip className={statusStyle(status)}>{label}</Chip>;
-}
-
-function PriorityBadge({ priority }: { priority: "low" | "medium" | "high" }) {
-  const label = priority === "high" ? "Urgent" : priority === "medium" ? "Upcoming" : "Low";
-  return <Chip className={priorityStyle(priority)}>{label}</Chip>;
-}
-
-function TaskStatusBadge({ task }: { task: TaskItem }) {
-  const tone = dueTone(daysUntil(task.dueDate), task.status === "done");
-  const className = tone === "complete"
-    ? "border-teal-100 bg-teal-50 text-teal-700"
-    : tone === "overdue"
-      ? "border-red-100 bg-red-50 text-red-700"
-      : tone === "soon"
-        ? "border-amber-100 bg-amber-50 text-amber-700"
-        : "border-slate-200 bg-slate-100 text-slate-600";
-  return <Chip className={className}>{dueLabel(task.dueDate, task.status === "done")}</Chip>;
-}
-
-function StatusCard({ label, value, detail, icon: Icon, tone = "neutral" }: { label: string; value: string; detail: string; icon: React.ElementType; tone?: "neutral" | "urgent" | "warning" | "good" }) {
-  const toneClass = tone === "urgent"
-    ? "border-red-100 bg-red-50 text-red-700"
-    : tone === "warning"
-      ? "border-amber-100 bg-amber-50 text-amber-700"
-      : tone === "good"
-        ? "border-teal-100 bg-teal-50 text-teal-700"
-        : "border-border bg-card text-[#1A3352]";
-
-  return (
-    <div className={`rounded-2xl border p-4 ${toneClass}`}>
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-white/65">
-        <Icon className="h-4 w-4" />
-      </div>
-      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-black leading-none tracking-[-0.04em] text-foreground">{value}</p>
-      <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{detail}</p>
-    </div>
-  );
-}
-
-function QuickAction({ icon: Icon, label, detail, primary, onClick }: { icon: React.ElementType; label: string; detail: string; primary?: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex min-h-[76px] items-center gap-3 rounded-2xl border p-4 text-left transition-all focus-visible:ring-2 focus-visible:ring-[#1A3352]/30 active:scale-[0.99] ${
-        primary ? "border-[#1A3352] bg-[#1A3352] text-white shadow-sm" : "border-border bg-card text-foreground hover:border-[#1A3352]/25 hover:shadow-sm"
-      }`}
-    >
-      <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${primary ? "bg-white/15 text-white" : "bg-[#EAF8F6] text-[#0D9488]"}`}>
-        <Icon className="h-4 w-4" />
-      </span>
-      <span className="min-w-0">
-        <span className={`block text-sm font-black leading-tight ${primary ? "text-white" : "text-foreground"}`}>{label}</span>
-        <span className={`mt-1 block text-xs leading-5 ${primary ? "text-white/70" : "text-muted-foreground"}`}>{detail}</span>
-      </span>
-    </button>
-  );
-}
-
-function TaskCard({ data, task, onToggle, onEdit, onDelete, compact = false }: { data: AppData; task: TaskItem; onToggle?: (id: string) => void; onEdit?: (task: TaskItem) => void; onDelete?: (id: string) => void; compact?: boolean }) {
-  const overdue = dueTone(daysUntil(task.dueDate), task.status === "done") === "overdue";
-  return (
-    <div className={`flex items-start gap-3 rounded-2xl border bg-card ${overdue ? "border-red-100" : "border-border"} ${compact ? "px-3 py-3" : "px-4 py-3.5"}`}>
-      {onToggle && (
-        <button onClick={() => onToggle(task.id)} className={`mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all focus-visible:ring-2 focus-visible:ring-[#1A3352]/30 ${task.status === "done" ? "border-[#0D9488] bg-[#0D9488]" : "border-border hover:border-[#0D9488] hover:bg-teal-50"}`} aria-label="Toggle task">
-          {task.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
-        </button>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <TaskStatusBadge task={task} />
-          <PriorityBadge priority={task.priority} />
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black capitalize text-slate-600">{task.type}</span>
-        </div>
-        <p className={`mt-2 text-sm font-black leading-tight ${task.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}>{task.title}</p>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{propertyName(data, task.propertyId)}</span>
-          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{task.dueDate}</span>
-        </div>
-      </div>
-      {(onEdit || onDelete) && (
-        <div className="flex flex-shrink-0 gap-1.5">
-          {onEdit && <IconAction label="Edit task" icon={Pencil} onClick={() => onEdit(task)} />}
-          {onDelete && <IconAction label="Delete task" icon={Trash2} tone="danger" onClick={() => onDelete(task.id)} />}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DocumentCard({ data, doc, onOpen, onEdit, onDelete }: { data: AppData; doc: DocItem; onOpen: (filePath: string) => void; onEdit: (doc: DocItem) => void; onDelete: (id: string) => void }) {
-  return (
-    <div className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/20 hover:shadow-sm">
-      <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black capitalize text-slate-600">{doc.type}</span>
-          {doc.filePath && <span className="rounded-md bg-teal-50 px-2 py-0.5 text-[10px] font-black text-teal-700">File attached</span>}
-        </div>
-        <p className="truncate text-sm font-black text-foreground">{doc.name}</p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{propertyName(data, doc.propertyId)}{doc.tenantName ? ` - ${doc.tenantName}` : ""} - {doc.date} - {doc.size}</p>
-      </div>
-      <div className="flex flex-shrink-0 gap-2">
-        {doc.filePath && <IconAction label="Open file" icon={Download} onClick={() => onOpen(doc.filePath!)} />}
-        <IconAction label="Edit document" icon={Pencil} onClick={() => onEdit(doc)} />
-        <IconAction label="Delete document" icon={Trash2} tone="danger" onClick={() => onDelete(doc.id)} />
-      </div>
-    </div>
-  );
-}
-
-function PropertyCard({ property, data, onSelect, onEdit, onDelete }: { property: Property; data: AppData; onSelect: (id: string) => void; onEdit: (property: Property) => void; onDelete: (id: string) => void }) {
-  const stats = propertyStats(data, property.id);
-  const openIssues = data.maintenance.filter((m) => m.propertyId === property.id && m.status !== "resolved").length;
-  const occupiedTone = stats.occupiedUnits === property.units ? "bg-teal-500" : "bg-amber-500";
-
-  return (
-    <div className="group overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--hh-shadow-sm)] transition-all hover:border-[var(--hh-primary)]/20 hover:shadow-[var(--hh-shadow-md)]">
-      <button onClick={() => onSelect(property.id)} className="w-full text-left active:scale-[0.99]">
-        <div className="relative h-44 bg-slate-200">
-          <img src={property.imageUrl || DEFAULT_IMAGES[0]} alt={property.name} className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-          {openIssues > 0 && <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-red-600 px-2 py-1 text-[10px] font-black text-white"><Wrench className="h-2.5 w-2.5" />{openIssues} open</div>}
-          <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[15px] font-black leading-tight text-white drop-shadow-sm">{property.name}</p>
-              <div className="mt-0.5 flex items-center gap-1"><MapPin className="h-3 w-3 flex-shrink-0 text-white/75" /><p className="truncate text-xs text-white/80">{property.address}</p></div>
-            </div>
-            <span className={`flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-black text-white ${occupiedTone}`}>{stats.occupiedUnits}/{property.units}</span>
-          </div>
-        </div>
-      </button>
-      <div className="grid grid-cols-3 gap-2 px-4 pt-4">
-        {[{ label: "Units", value: property.units }, { label: "Tenants", value: stats.tenants.length }, { label: "Monthly", value: money(stats.revenue) }].map((item) => (
-          <div key={item.label} className="rounded-xl bg-background py-2.5 text-center">
-            <p className="text-[15px] font-black tracking-[-0.03em] text-foreground">{item.value}</p>
-            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.label}</p>
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-between gap-2 px-4 py-3">
-        <Button variant="ghost" onClick={() => onSelect(property.id)} className="min-h-8 px-2 py-1 text-xs">Open</Button>
-        <div className="flex gap-2">
-          <IconAction label="Edit property" icon={Pencil} onClick={() => onEdit(property)} />
-          <IconAction label="Delete property" icon={Trash2} tone="danger" onClick={() => onDelete(property.id)} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SearchAndFilterBar<T extends string>({ query, onQueryChange, placeholder, filters, activeFilter, onFilterChange }: { query?: string; onQueryChange?: (value: string) => void; placeholder?: string; filters?: readonly T[]; activeFilter?: T; onFilterChange?: (value: T) => void }) {
-  return (
-    <div className="space-y-3 px-4 py-3">
-      {query !== undefined && onQueryChange && <SearchInput value={query} onChange={onQueryChange} placeholder={placeholder || "Search..."} />}
-      {filters && activeFilter && onFilterChange && (
-        <div className="flex gap-2 overflow-x-auto pb-0.5">
-          {filters.map((item) => (
-            <button key={item} onClick={() => onFilterChange(item)} className={`min-h-9 flex-shrink-0 rounded-full px-3.5 py-1.5 text-xs font-black capitalize transition-all active:scale-[0.98] ${activeFilter === item ? "bg-[var(--hh-primary)] text-white" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}>
-              {item === "all" ? "All" : item}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ConfirmationToast({ notice }: { notice: { message: string; tone: "success" | "error" } | null }) {
-  if (!notice) return null;
-  const error = notice.tone === "error";
-  return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[60] flex justify-center px-4 lg:bottom-6">
-      <div className={`flex max-w-sm items-center gap-2 rounded-2xl border bg-white px-4 py-3 text-sm font-black text-foreground shadow-xl ${error ? "border-red-100" : "border-teal-100"}`}>
-        {error ? <AlertTriangle className="h-4 w-4 text-red-600" /> : <CheckCircle2 className="h-4 w-4 text-[#0D9488]" />}
-        <span>{notice.message}</span>
-      </div>
-    </div>
-  );
-}
-
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return (parts[0]?.[0] || "U") + (parts[1]?.[0] || "");
-}
-
-const NAV_ITEMS = [
-  { id: "dashboard" as Tab, label: "Today", Icon: Home },
-  { id: "properties" as Tab, label: "Properties", Icon: Building2 },
-  { id: "tasks" as Tab, label: "Tasks", Icon: CheckSquare },
-  { id: "documents" as Tab, label: "Docs", Icon: FileText },
-  { id: "settings" as Tab, label: "Settings", Icon: Settings },
-];
-
-function MobileNav({ active, onChange, badge }: { active: Tab; onChange: (tab: Tab) => void; badge: number }) {
-  return (
-    <nav className="border-t border-border bg-card pb-[calc(env(safe-area-inset-bottom)+0.25rem)] lg:hidden">
-      <div className="flex">
-        {NAV_ITEMS.map(({ id, label, Icon }) => {
-          const activeItem = active === id;
-          return (
-            <button key={id} onClick={() => onChange(id)} className={`relative flex min-h-[60px] flex-1 flex-col items-center gap-0.5 pb-3 pt-2 transition-colors ${activeItem ? "text-[#1A3352]" : "text-muted-foreground"}`}>
-              {activeItem && <span className="absolute top-0 h-[2px] w-8 rounded-full bg-[#1A3352]" />}
-              <span className="relative">
-                <Icon className="h-[21px] w-[21px]" />
-                {id === "dashboard" && badge > 0 && <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white">{badge > 9 ? "9+" : badge}</span>}
-              </span>
-              <span className="text-[10px] font-bold leading-none">{label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
-
-function Sidebar({ active, onChange, badge, profile }: { active: Tab; onChange: (tab: Tab) => void; badge: number; profile: AppProfile }) {
-  return (
-    <aside className="hidden h-full w-[232px] flex-shrink-0 flex-col bg-[#1A3352] lg:flex">
-      <div className="flex items-center gap-2.5 border-b border-white/10 px-5 py-[18px]">
-        <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/15"><Home className="h-4 w-4 text-white" /></div>
-        <span className="text-[15px] font-black tracking-[-0.03em] text-white">Home Harbor</span>
-      </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-        {NAV_ITEMS.map(({ id, label, Icon }) => {
-          const activeItem = active === id;
-          return (
-            <button key={id} onClick={() => onChange(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-bold transition-all ${activeItem ? "bg-white/15 text-white" : "text-white/55 hover:bg-white/10 hover:text-white"}`}>
-              <Icon className="h-4 w-4" />
-              <span className="flex-1 text-left">{label}</span>
-              {id === "dashboard" && badge > 0 && <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">{badge}</span>}
-            </button>
-          );
-        })}
-      </nav>
-      <div className="border-t border-white/10 p-3">
-        <div className="flex items-center gap-2.5 rounded-xl px-2 py-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-[11px] font-black uppercase text-white">{initials(profile.name)}</div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-bold leading-tight text-white">{profile.name}</p>
-            <p className="truncate text-[11px] leading-tight text-white/45">{profile.portfolioName}</p>
-          </div>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-function AppShell({ active, onChange, badge, profile, cloudStatus, children, modal, data, selectedProperty, editRecord, saving, closeModal, save, notice }: { active: Tab; onChange: (tab: Tab) => void; badge: number; profile: AppProfile; cloudStatus: string; children: React.ReactNode; modal: ModalKind; data: AppData; selectedProperty: string | null; editRecord: EditableRecord; saving: boolean; closeModal: () => void; save: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editRecord: EditableRecord) => Promise<void>; notice: { message: string; tone: "success" | "error" } | null }) {
-  return (
-    <div className="flex h-[100dvh] overflow-hidden bg-background pt-[env(safe-area-inset-top)]">
-      <Sidebar active={active} onChange={onChange} badge={badge} profile={profile} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto">
-          <div className="border-b border-border bg-card px-4 py-2 text-center text-[11px] font-bold text-muted-foreground lg:text-left">
-            {cloudStatus}
-          </div>
-          <InstallHint />
-          {children}
-        </main>
-        <MobileNav active={active} onChange={onChange} badge={badge} />
-      </div>
-      <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={saving} onClose={closeModal} onSave={save} />
-      <ConfirmationToast notice={notice} />
-    </div>
-  );
 }
 
 function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onToggleNotifications, onAddTask, onAddMaintenance, onAddDocument, onOpenProperty }: { data: AppData; profile: AppProfile; reminders: ReminderItem[]; notificationsEnabled: boolean; onNav: (tab: Tab) => void; onToggleNotifications: () => void; onAddTask: () => void; onAddMaintenance: () => void; onAddDocument: () => void; onOpenProperty: (id: string) => void }) {
@@ -915,9 +170,9 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                 {calm ? "Nothing urgent is blocking your portfolio right now." : `${attentionCount} item${attentionCount === 1 ? "" : "s"} need attention before the day gets away from you.`}
               </p>
             </div>
-            <button onClick={() => setShowNotifications((visible) => !visible)} className="relative flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-[#1A3352]/30" aria-label="Notifications">
+            <button onClick={() => setShowNotifications((visible) => !visible)} className="relative flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30" aria-label="Notifications">
             <Bell className="h-5 w-5 text-foreground/60" />
-            {reminders.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-red-500 px-1 text-[10px] font-black text-white">{reminders.length > 9 ? "9+" : reminders.length}</span>}
+            {reminders.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-[var(--hh-urgent)] px-1 text-[10px] font-black text-white">{reminders.length > 9 ? "9+" : reminders.length}</span>}
             </button>
           </div>
           <div className="mt-5 grid gap-2 sm:grid-cols-3">
@@ -936,7 +191,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                 <p className="text-sm font-black text-foreground">Reminders</p>
                 <p className="text-xs text-muted-foreground">{notificationsEnabled ? "Browser notifications enabled" : "In-app reminders active"}</p>
               </div>
-              <button onClick={onToggleNotifications} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-black text-[#1A3352] focus-visible:ring-2 focus-visible:ring-[#1A3352]/30">
+              <button onClick={onToggleNotifications} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-black text-[var(--hh-primary)] focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">
                 {notificationsEnabled ? "On" : "Enable"}
               </button>
             </div>
@@ -945,7 +200,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                 <p className="rounded-xl bg-background px-3 py-3 text-xs font-bold text-muted-foreground">No urgent reminders right now.</p>
               ) : reminders.slice(0, 8).map((reminder) => (
                 <button key={reminder.id} onClick={() => onNav(reminder.tab)} className="flex w-full items-start gap-3 rounded-xl bg-background px-3 py-3 text-left">
-                  <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${reminder.severity === "high" ? "bg-red-500" : reminder.severity === "medium" ? "bg-amber-400" : "bg-slate-300"}`} />
+                  <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${reminder.severity === "high" ? "bg-[var(--hh-urgent)]" : reminder.severity === "medium" ? "bg-[var(--hh-warning)]" : "bg-slate-300"}`} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs font-black text-foreground">{reminder.title}</span>
                     <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{reminder.detail}</span>
@@ -968,14 +223,14 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
       {(totals.urgent.length > 0 || totals.expiring.length > 0) && (
         <section className="mb-6 px-4">
           <div className="mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <AlertTriangle className="h-4 w-4 text-[var(--hh-warning)]" />
             <h2 className="text-sm font-black tracking-tight text-foreground">Needs Attention</h2>
           </div>
           <div className="space-y-2.5">
             {totals.urgent.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-red-100 bg-card p-4">
+              <div key={item.id} className="rounded-2xl border border-[var(--hh-urgent-border)] bg-card p-4">
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-red-50"><Wrench className="h-4 w-4 text-red-600" /></div>
+                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-urgent-bg)]"><Wrench className="h-4 w-4 text-[var(--hh-urgent)]" /></div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black leading-tight text-foreground">{item.title}</p>
                     <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, item.propertyId)} - {item.unit} - {item.tenantName}</p>
@@ -984,20 +239,20 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                       <Chip className={priorityStyle(item.priority)}>High</Chip>
                     </div>
                   </div>
-                  <button onClick={() => onNav("properties")} className="mt-0.5 flex-shrink-0 text-xs font-black text-[#1A3352] hover:opacity-60">View</button>
+                  <button onClick={() => onNav("properties")} className="mt-0.5 flex-shrink-0 text-xs font-black text-[var(--hh-primary)] hover:opacity-60">View</button>
                 </div>
               </div>
             ))}
             {totals.expiring.map((tenant) => (
-              <div key={tenant.id} className="rounded-2xl border border-amber-100 bg-card p-4">
+              <div key={tenant.id} className="rounded-2xl border border-[var(--hh-warning-border)] bg-card p-4">
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-amber-50"><Calendar className="h-4 w-4 text-amber-600" /></div>
+                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-warning-bg)]"><Calendar className="h-4 w-4 text-[var(--hh-warning)]" /></div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black leading-tight text-foreground">Lease expiring - {tenant.name}</p>
                     <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, tenant.propertyId)} - {tenant.unit} - ends {tenant.leaseEnd}</p>
                     <div className="mt-2"><StatusBadge status={tenant.status} /></div>
                   </div>
-                  <button onClick={() => onNav("tasks")} className="mt-0.5 flex-shrink-0 text-xs font-black text-[#1A3352] hover:opacity-60">Renew</button>
+                  <button onClick={() => onNav("tasks")} className="mt-0.5 flex-shrink-0 text-xs font-black text-[var(--hh-primary)] hover:opacity-60">Renew</button>
                 </div>
               </div>
             ))}
@@ -1007,8 +262,8 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
 
       <section className="mb-6 px-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2"><ClipboardList className="h-4 w-4 text-[#0D9488]" /><h2 className="text-sm font-black tracking-tight text-foreground">Overdue & Due Soon</h2></div>
-          <button onClick={() => onNav("tasks")} className="text-xs font-black text-[#1A3352] hover:opacity-60 focus-visible:ring-2 focus-visible:ring-[#1A3352]/30">See all</button>
+          <div className="flex items-center gap-2"><ClipboardList className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-black tracking-tight text-foreground">Overdue & Due Soon</h2></div>
+          <button onClick={() => onNav("tasks")} className="text-xs font-black text-[var(--hh-primary)] hover:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">See all</button>
         </div>
         <div className="space-y-2">
           {[...totals.overdueTasks, ...totals.dueSoonTasks.filter((task) => !totals.overdueTasks.some((overdue) => overdue.id === task.id))].slice(0, 6).map((task) => (
@@ -1022,24 +277,24 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
       <section className="grid gap-6 px-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-[#1A3352]" /><h2 className="text-sm font-black tracking-tight text-foreground">Property Status</h2></div>
-            <button onClick={() => onNav("properties")} className="text-xs font-black text-[#1A3352] hover:opacity-60">Open properties</button>
+            <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-[var(--hh-primary)]" /><h2 className="text-sm font-black tracking-tight text-foreground">Property Status</h2></div>
+            <button onClick={() => onNav("properties")} className="text-xs font-black text-[var(--hh-primary)] hover:opacity-60">Open properties</button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {data.properties.slice(0, 4).map((property) => {
               const stats = propertyStats(data, property.id);
               const openIssues = data.maintenance.filter((item) => item.propertyId === property.id && item.status !== "resolved").length;
               return (
-                <button key={property.id} onClick={() => onOpenProperty(property.id)} className="rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-[#1A3352]/25 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-[#1A3352]/30">
+                <button key={property.id} onClick={() => onOpenProperty(property.id)} className="rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-[var(--hh-primary)]/25 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black text-foreground">{property.name}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{stats.occupiedUnits}/{property.units} occupied</p>
                     </div>
-                    <Chip className={openIssues > 0 ? "border-red-100 bg-red-50 text-red-700" : "border-teal-100 bg-teal-50 text-teal-700"}>{openIssues > 0 ? `${openIssues} open` : "Clear"}</Chip>
+                    <Chip className={openIssues > 0 ? "border-[var(--hh-urgent-border)] bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]" : "border-[var(--hh-success-border)] bg-[var(--hh-success-bg)] text-[var(--hh-success)]"}>{openIssues > 0 ? `${openIssues} open` : "Clear"}</Chip>
                   </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-[#0D9488]" style={{ width: `${Math.min((stats.occupiedUnits / Math.max(property.units, 1)) * 100, 100)}%` }} />
+                    <div className="h-full rounded-full bg-[var(--hh-success)]" style={{ width: `${Math.min((stats.occupiedUnits / Math.max(property.units, 1)) * 100, 100)}%` }} />
                   </div>
                 </button>
               );
@@ -1048,11 +303,11 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
           </div>
         </div>
         <div>
-          <div className="mb-3 flex items-center gap-2"><Clock className="h-4 w-4 text-[#0D9488]" /><h2 className="text-sm font-black tracking-tight text-foreground">Recent Activity</h2></div>
+          <div className="mb-3 flex items-center gap-2"><Clock className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-black tracking-tight text-foreground">Recent Activity</h2></div>
           <div className="space-y-2">
             {[...data.maintenance.slice(-2).map((item) => ({ id: `m-${item.id}`, title: item.title, detail: `${propertyName(data, item.propertyId)} - ${item.status}`, Icon: Wrench })), ...data.docs.slice(-2).map((doc) => ({ id: `d-${doc.id}`, title: doc.name, detail: `${propertyName(data, doc.propertyId)} - ${doc.type}`, Icon: FileText }))].reverse().map(({ id, title, detail, Icon }) => (
               <div key={id} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#EAF8F6]"><Icon className="h-4 w-4 text-[#0D9488]" /></div>
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-success-bg)]"><Icon className="h-4 w-4 text-[var(--hh-success)]" /></div>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-black text-foreground">{title}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p></div>
               </div>
             ))}
@@ -1116,7 +371,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
         onBack={onBack}
         action={
           <div className="flex items-center gap-2">
-            {openIssues > 0 && <Chip className="border-red-100 bg-red-50 text-red-700">{openIssues} open</Chip>}
+            {openIssues > 0 && <Chip className="border-[var(--hh-urgent-border)] bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]">{openIssues} open</Chip>}
             <IconAction label="Edit property" icon={Pencil} onClick={() => onEditProperty(property)} />
             <IconAction label="Delete property" icon={Trash2} tone="danger" onClick={() => onDeleteProperty(property.id)} />
           </div>
@@ -1139,7 +394,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
         <div className="flex gap-1 rounded-xl bg-muted/50 p-1">
           {(["overview", "maintenance", "documents"] as const).map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 rounded-lg py-2 text-xs font-black capitalize leading-none transition-all ${activeTab === tab ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground/70"}`}>
-              {tab}{tab === "maintenance" && openIssues > 0 && <span className="ml-1 text-red-500">({openIssues})</span>}
+              {tab}{tab === "maintenance" && openIssues > 0 && <span className="ml-1 text-[var(--hh-urgent)]">({openIssues})</span>}
             </button>
           ))}
         </div>
@@ -1150,7 +405,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
           <>
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Units & Tenants</p>
-              <button onClick={onAddTenant} className="flex items-center gap-1 text-xs font-black text-[#1A3352]"><Plus className="h-3.5 w-3.5" />Add tenant</button>
+              <button onClick={onAddTenant} className="flex items-center gap-1 text-xs font-black text-[var(--hh-primary)]"><Plus className="h-3.5 w-3.5" />Add tenant</button>
             </div>
             {stats.tenants.map((tenant) => (
               <div key={tenant.id} className="rounded-2xl border border-border bg-card p-4">
@@ -1165,14 +420,14 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
                 <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground"><Calendar className="h-3.5 w-3.5" /><span>{tenant.leaseStart} - {tenant.leaseEnd}</span></div>
                 {tenant.notes && <p className="mb-3 rounded-xl bg-muted/40 px-3 py-2 text-xs italic leading-relaxed text-muted-foreground">"{tenant.notes}"</p>}
                 <div className="flex items-center gap-3 border-t border-border pt-3">
-                  <a href={`tel:${tenant.phone}`} className="flex items-center gap-1.5 text-xs font-black text-[#1A3352] hover:opacity-60"><Phone className="h-3.5 w-3.5" />{tenant.phone}</a>
+                  <a href={`tel:${tenant.phone}`} className="flex items-center gap-1.5 text-xs font-black text-[var(--hh-primary)] hover:opacity-60"><Phone className="h-3.5 w-3.5" />{tenant.phone}</a>
                   <span className="h-3 w-px bg-border" />
-                  <a href={`mailto:${tenant.email}`} className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-black text-[#1A3352] hover:opacity-60"><Mail className="h-3.5 w-3.5 flex-shrink-0" /><span className="truncate">{tenant.email}</span></a>
+                  <a href={`mailto:${tenant.email}`} className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-black text-[var(--hh-primary)] hover:opacity-60"><Mail className="h-3.5 w-3.5 flex-shrink-0" /><span className="truncate">{tenant.email}</span></a>
                 </div>
               </div>
             ))}
             {vacant > 0 && (
-              <button onClick={onAddTenant} className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-border p-4 text-left transition-colors hover:border-[#1A3352]/30">
+              <button onClick={onAddTenant} className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-border p-4 text-left transition-colors hover:border-[var(--hh-primary)]/30">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted"><Plus className="h-4 w-4 text-muted-foreground" /></div>
                 <div><p className="text-sm font-bold text-foreground">{vacant} vacant {vacant === 1 ? "unit" : "units"}</p><p className="text-xs text-muted-foreground">Add tenant details and lease dates</p></div>
               </button>
@@ -1182,7 +437,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
 
         {activeTab === "maintenance" && (
           <>
-            <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Requests</p><button onClick={onAddMaintenance} className="flex items-center gap-1 text-xs font-black text-[#1A3352]"><Plus className="h-3.5 w-3.5" />Add</button></div>
+            <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Requests</p><button onClick={onAddMaintenance} className="flex items-center gap-1 text-xs font-black text-[var(--hh-primary)]"><Plus className="h-3.5 w-3.5" />Add</button></div>
             {maintenance.length === 0 ? <EmptyState icon={Wrench} title="No maintenance requests" /> : maintenance.map((item) => (
               <div key={item.id} className="rounded-2xl border border-border bg-card p-4">
                 <div className="mb-2 flex items-start justify-between gap-2">
@@ -1194,10 +449,10 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
                   </div>
                 </div>
                 <p className="mb-3 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
-                <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{item.unit} - {item.tenantName}</span><span>{item.date}</span>{item.vendor && <span className="font-bold text-[#1A3352]">{item.vendor}</span>}</div>
+                <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{item.unit} - {item.tenantName}</span><span>{item.date}</span>{item.vendor && <span className="font-bold text-[var(--hh-primary)]">{item.vendor}</span>}</div>
                 <div className="flex items-center justify-between gap-2">
                   <Chip className={priorityStyle(item.priority)}>{item.priority}</Chip>
-                  {item.status !== "resolved" ? <button onClick={() => updateMaintenance(item.id, "resolved")} className="text-xs font-black text-[#0D9488]">Mark resolved</button> : <button onClick={() => updateMaintenance(item.id, "open")} className="text-xs font-black text-[#1A3352]">Reopen</button>}
+                  {item.status !== "resolved" ? <button onClick={() => updateMaintenance(item.id, "resolved")} className="text-xs font-black text-[var(--hh-success)]">Mark resolved</button> : <button onClick={() => updateMaintenance(item.id, "open")} className="text-xs font-black text-[var(--hh-primary)]">Reopen</button>}
                 </div>
               </div>
             ))}
@@ -1206,7 +461,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
 
         {activeTab === "documents" && (
           <>
-            <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Files</p><button onClick={onAddDocument} className="flex items-center gap-1 text-xs font-black text-[#1A3352]"><Upload className="h-3.5 w-3.5" />Upload</button></div>
+            <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Files</p><button onClick={onAddDocument} className="flex items-center gap-1 text-xs font-black text-[var(--hh-primary)]"><Upload className="h-3.5 w-3.5" />Upload</button></div>
             {docs.length === 0 ? <EmptyState icon={FileText} title="No documents yet" /> : docs.map((doc) => (
               <div key={doc.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
@@ -1291,9 +546,9 @@ function LegalPage({ kind, onBack }: { kind: "privacy" | "terms"; onBack: () => 
     <div className="pb-24 lg:pb-10">
       <PageHeader title={privacy ? "Privacy Policy" : "Terms of Use"} subtitle="Beta draft for public testing" onBack={onBack} />
       <div className="space-y-3 px-4 pt-4">
-        <div className="rounded-2xl border border-[#1A3352]/15 bg-card p-5">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF8F6]">
-            {privacy ? <Shield className="h-5 w-5 text-[#0D9488]" /> : <Scale className="h-5 w-5 text-[#0D9488]" />}
+        <div className="rounded-2xl border border-[var(--hh-primary-border)] bg-card p-5">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--hh-success-bg)]">
+            {privacy ? <Shield className="h-5 w-5 text-[var(--hh-success)]" /> : <Scale className="h-5 w-5 text-[var(--hh-success)]" />}
           </div>
           <p className="text-lg font-black tracking-[-0.03em] text-foreground">{privacy ? "Your rental data stays yours." : "Clear terms for beta use."}</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Last updated August 8, 2026. This draft should be reviewed by a qualified attorney before a full public launch.</p>
@@ -1337,7 +592,7 @@ function FeedbackScreen({ profile, userId, currentPage, onBack, onTrack }: { pro
       <PageHeader title="Feedback" subtitle="Help shape the beta" onBack={onBack} />
       <div className="px-4 pt-4">
         <form onSubmit={submit} className="rounded-2xl border border-border bg-card p-5">
-          <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF8F6]"><MessageSquare className="h-5 w-5 text-[#0D9488]" /></div>
+          <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--hh-success-bg)]"><MessageSquare className="h-5 w-5 text-[var(--hh-success)]" /></div>
           <p className="text-lg font-black tracking-[-0.03em] text-foreground">Tell us what happened.</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Bug reports, feature ideas, confusing screens, and beta notes all land in your Supabase feedback table.</p>
           <div className="mt-5 space-y-3">
@@ -1398,7 +653,7 @@ function AnalyticsScreen({ userId, analyticsEnabled, setAnalyticsEnabled, onBack
       <PageHeader title="Analytics" subtitle="First-party beta signals" onBack={onBack} />
       <div className="space-y-3 px-4 pt-4">
         <div className="rounded-2xl border border-border bg-card p-5">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF8F6]"><BarChart3 className="h-5 w-5 text-[#0D9488]" /></div>
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--hh-success-bg)]"><BarChart3 className="h-5 w-5 text-[var(--hh-success)]" /></div>
           <p className="text-lg font-black tracking-[-0.03em] text-foreground">Privacy-friendly product analytics.</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Home Harbor records simple events like page opens, creates, updates, deletes, and feedback submissions to your own Supabase project.</p>
           <Button onClick={toggleAnalytics} variant={analyticsEnabled ? "primary" : "secondary"} className="mt-4 w-full">
@@ -1447,7 +702,7 @@ function SettingsScreen({ data, profile, userId, activeTab, notificationsEnabled
       <PageHeader title="Settings" />
       <div className="px-4 pt-4">
         <div className="mb-6 flex items-center gap-4 rounded-2xl border border-border bg-card p-5">
-          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-[#1A3352] text-lg font-black uppercase text-white">{initials(profile.name)}</div>
+          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-[var(--hh-primary)] text-lg font-black uppercase text-white">{initials(profile.name)}</div>
           <div className="min-w-0 flex-1"><p className="font-black tracking-[-0.02em] text-foreground">{profile.name}</p><p className="text-sm text-muted-foreground">{profile.email}</p><p className="mt-1 text-xs text-muted-foreground">{data.properties.length} properties - {data.tenants.length} tenants</p></div>
         </div>
         {items.map((section) => (
@@ -1586,7 +841,7 @@ function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, o
 function AuthShell({ children, eyebrow, title, subtitle }: { children: React.ReactNode; eyebrow: string; title: string; subtitle: string }) {
   return (
     <div className="min-h-screen bg-background lg:grid lg:grid-cols-[0.9fr_1.1fr]">
-      <section className="hidden bg-[#1A3352] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+      <section className="hidden bg-[var(--hh-primary)] p-10 text-white lg:flex lg:flex-col lg:justify-between">
         <div>
           <div className="mb-10 flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Home className="h-5 w-5" /></div>
@@ -1612,7 +867,7 @@ function AuthShell({ children, eyebrow, title, subtitle }: { children: React.Rea
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
         <div className="w-full max-w-[440px]">
           <div className="mb-6 flex items-center gap-2 lg:hidden">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1A3352] text-white"><Home className="h-4 w-4" /></div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--hh-primary)] text-white"><Home className="h-4 w-4" /></div>
             <span className="font-black tracking-[-0.03em] text-foreground">Home Harbor</span>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
@@ -1637,7 +892,7 @@ function CloudSetupScreen() {
       <div className="mt-6 space-y-3">
         <div className="rounded-xl border border-border bg-background p-4">
           <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">1. Environment</p>
-          <pre className="mt-2 overflow-x-auto rounded-lg bg-[#0D1422] p-3 text-xs leading-5 text-white">{`VITE_SUPABASE_URL=https://your-project.supabase.co
+          <pre className="mt-2 overflow-x-auto rounded-lg bg-[var(--hh-code-bg)] p-3 text-xs leading-5 text-white">{`VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-public-anon-key`}</pre>
         </div>
         <div className="rounded-xl border border-border bg-background p-4">
@@ -1668,10 +923,10 @@ function InstallHint() {
   }
 
   return (
-    <div className="mx-4 mt-3 rounded-2xl border border-[#1A3352]/15 bg-card p-4 shadow-sm">
+    <div className="mx-4 mt-3 rounded-2xl border border-[var(--hh-primary-border)] bg-card p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#EAF8F6]">
-          <Upload className="h-4 w-4 text-[#0D9488]" />
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-success-bg)]">
+          <Upload className="h-4 w-4 text-[var(--hh-success)]" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-black text-foreground">Install on your iPhone</p>
@@ -1725,7 +980,7 @@ function AuthScreen() {
           {busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
         </Button>
       </form>
-      <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="mt-4 w-full text-center text-xs font-black text-[#1A3352]">
+      <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="mt-4 w-full text-center text-xs font-black text-[var(--hh-primary)]">
         {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
       </button>
     </AuthShell>
@@ -1769,7 +1024,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
 
   return (
     <div className="min-h-screen bg-background lg:grid lg:grid-cols-[0.92fr_1.08fr]">
-      <section className="relative hidden overflow-hidden bg-[#1A3352] p-10 text-white lg:flex lg:flex-col lg:justify-between">
+      <section className="relative hidden overflow-hidden bg-[var(--hh-primary)] p-10 text-white lg:flex lg:flex-col lg:justify-between">
         <div>
           <div className="mb-10 flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Home className="h-5 w-5" /></div>
@@ -1796,12 +1051,12 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
         <div className="w-full max-w-[520px]">
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2 lg:hidden">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#1A3352] text-white"><Home className="h-4 w-4" /></div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--hh-primary)] text-white"><Home className="h-4 w-4" /></div>
               <span className="font-black tracking-[-0.03em] text-foreground">Home Harbor</span>
             </div>
             <div className="ml-auto flex gap-1.5">
               {steps.map((label, index) => (
-                <span key={label} className={`h-1.5 rounded-full transition-all ${index === step ? "w-7 bg-[#1A3352]" : index < step ? "w-4 bg-[#0D9488]" : "w-4 bg-muted"}`} />
+                <span key={label} className={`h-1.5 rounded-full transition-all ${index === step ? "w-7 bg-[var(--hh-primary)]" : index < step ? "w-4 bg-[var(--hh-success)]" : "w-4 bg-muted"}`} />
               ))}
             </div>
           </div>
@@ -1809,7 +1064,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
           <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
             {step === 0 && (
               <div>
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EAF8F6]"><Building2 className="h-6 w-6 text-[#0D9488]" /></div>
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--hh-success-bg)]"><Building2 className="h-6 w-6 text-[var(--hh-success)]" /></div>
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Welcome</p>
                 <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">Let’s set up your rental command center.</h2>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">Home Harbor works best when it starts with your name, your portfolio, and at least one property. You can use sample data first or begin with your own clean workspace.</p>
@@ -1820,7 +1075,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
                     { Icon: FileText, title: "Organize documents", copy: "Leases, inspections, receipts, and warranties live together." },
                   ].map(({ Icon, title, copy }) => (
                     <div key={title} className="flex gap-3 rounded-xl bg-background p-3">
-                      <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#1A3352]" />
+                      <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--hh-primary)]" />
                       <div><p className="text-sm font-black text-foreground">{title}</p><p className="text-xs leading-5 text-muted-foreground">{copy}</p></div>
                     </div>
                   ))}
@@ -1845,13 +1100,13 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Portfolio start</p>
                 <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">Choose how you want to begin.</h2>
                 <div className="mt-6 grid gap-2 sm:grid-cols-2">
-                  <button type="button" onClick={() => setMode("sample")} className={`rounded-2xl border p-4 text-left transition-all ${mode === "sample" ? "border-[#1A3352] bg-[#1A3352]/5 ring-2 ring-[#1A3352]/10" : "border-border bg-background"}`}>
-                    <CheckCircle2 className={`mb-3 h-5 w-5 ${mode === "sample" ? "text-[#0D9488]" : "text-muted-foreground"}`} />
+                  <button type="button" onClick={() => setMode("sample")} className={`rounded-2xl border p-4 text-left transition-all ${mode === "sample" ? "border-[var(--hh-primary)] bg-[var(--hh-primary-soft)] ring-2 ring-[var(--hh-primary-border)]" : "border-border bg-background"}`}>
+                    <CheckCircle2 className={`mb-3 h-5 w-5 ${mode === "sample" ? "text-[var(--hh-success)]" : "text-muted-foreground"}`} />
                     <p className="text-sm font-black text-foreground">Use sample portfolio</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">Best for exploring the app with realistic data.</p>
                   </button>
-                  <button type="button" onClick={() => setMode("fresh")} className={`rounded-2xl border p-4 text-left transition-all ${mode === "fresh" ? "border-[#1A3352] bg-[#1A3352]/5 ring-2 ring-[#1A3352]/10" : "border-border bg-background"}`}>
-                    <Plus className={`mb-3 h-5 w-5 ${mode === "fresh" ? "text-[#1A3352]" : "text-muted-foreground"}`} />
+                  <button type="button" onClick={() => setMode("fresh")} className={`rounded-2xl border p-4 text-left transition-all ${mode === "fresh" ? "border-[var(--hh-primary)] bg-[var(--hh-primary-soft)] ring-2 ring-[var(--hh-primary-border)]" : "border-border bg-background"}`}>
+                    <Plus className={`mb-3 h-5 w-5 ${mode === "fresh" ? "text-[var(--hh-primary)]" : "text-muted-foreground"}`} />
                     <p className="text-sm font-black text-foreground">Start with my property</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">Create a clean workspace with one property.</p>
                   </button>
@@ -1876,7 +1131,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
                 type="button"
                 disabled={!canContinue}
                 onClick={() => step === 2 ? finish() : setStep(step + 1)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#1A3352] px-4 py-3 text-sm font-black text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--hh-primary)] px-4 py-3 text-sm font-black text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {step === 2 ? "Enter Home Harbor" : "Continue"}
                 <ChevronRight className="h-4 w-4" />
@@ -2289,7 +1544,7 @@ export default function App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
-          <Home className="mx-auto mb-3 h-8 w-8 text-[#1A3352]" />
+          <Home className="mx-auto mb-3 h-8 w-8 text-[var(--hh-primary)]" />
           <p className="text-sm font-black text-foreground">Loading Home Harbor...</p>
           <p className="mt-1 text-xs text-muted-foreground">Checking your account session.</p>
         </div>
@@ -2305,7 +1560,7 @@ export default function App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
-          <Shield className="mx-auto mb-3 h-8 w-8 text-[#0D9488]" />
+          <Shield className="mx-auto mb-3 h-8 w-8 text-[var(--hh-success)]" />
           <p className="text-sm font-black text-foreground">Loading your portfolio...</p>
           <p className="mt-1 text-xs text-muted-foreground">{cloudStatus}</p>
           <SkeletonLoader rows={2} />
@@ -2325,13 +1580,8 @@ export default function App() {
       badge={badge}
       profile={profile}
       cloudStatus={cloudStatus}
-      modal={modal}
-      data={data}
-      selectedProperty={selectedProperty}
-      editRecord={editRecord}
-      saving={savingRecord}
-      closeModal={closeModal}
-      save={save}
+      beforeContent={<InstallHint />}
+      overlay={<AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={savingRecord} onClose={closeModal} onSave={save} />}
       notice={notice}
     >
       {renderContent()}
