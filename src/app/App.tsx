@@ -66,6 +66,7 @@ import type {
   AnalyticsSummary,
   AppData,
   AppProfile,
+  ActivityItem,
   DocItem,
   EditableRecord,
   MaintenanceItem,
@@ -134,6 +135,37 @@ function initials(name: string) {
   return (parts[0]?.[0] || "U") + (parts[1]?.[0] || "");
 }
 
+function activityTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Just now";
+  const minutes = Math.max(Math.round((Date.now() - date.getTime()) / 60000), 0);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+}
+
+function withActivity(data: AppData, activity: Omit<ActivityItem, "id" | "at">): AppData {
+  return {
+    ...data,
+    activity: [
+      { id: uid("a"), at: new Date().toISOString(), ...activity },
+      ...(data.activity || []),
+    ].slice(0, 80),
+  };
+}
+
+function maintenanceNextAction(item: MaintenanceItem) {
+  if (item.status === "resolved") return "Handled. Keep the receipt or vendor note attached.";
+  if (item.status === "in-progress") return item.vendor ? `Waiting on ${item.vendor}.` : "Add the vendor or mark resolved when finished.";
+  return item.priority === "high" ? "Assign a vendor or contact the tenant today." : "Decide who owns the next follow-up.";
+}
+
+function leaseNextAction(tenant: Tenant) {
+  return tenant.status === "expired" ? "Contact tenant and document the decision." : "Send renewal terms or add a renewal task.";
+}
+
 function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onToggleNotifications, onAddTask, onAddMaintenance, onAddDocument, onOpenProperty }: { data: AppData; profile: AppProfile; reminders: ReminderItem[]; notificationsEnabled: boolean; onNav: (tab: Tab) => void; onToggleNotifications: () => void; onAddTask: () => void; onAddMaintenance: () => void; onAddDocument: () => void; onOpenProperty: (id: string) => void }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const totals = useMemo(() => {
@@ -158,6 +190,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
   const vacant = Math.max(totals.units - data.tenants.length, 0);
   const attentionCount = totals.urgent.length + totals.expiring.length + totals.overdueTasks.length;
   const calm = attentionCount === 0;
+  const activity = (data.activity || []).slice(0, 5);
 
   return (
     <div className="mx-auto w-full max-w-6xl pb-24 lg:pb-10">
@@ -235,6 +268,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black leading-tight text-foreground">{item.title}</p>
                     <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, item.propertyId)} - {item.unit} - {item.tenantName}</p>
+                    <p className="mt-2 rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">Next action: {maintenanceNextAction(item)}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <StatusBadge status={item.status} />
                       <Chip className={priorityStyle(item.priority)}>High</Chip>
@@ -251,6 +285,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black leading-tight text-foreground">Lease expiring - {tenant.name}</p>
                     <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, tenant.propertyId)} - {tenant.unit} - ends {tenant.leaseEnd}</p>
+                    <p className="mt-2 rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">Next action: {leaseNextAction(tenant)}</p>
                     <div className="mt-2"><StatusBadge status={tenant.status} /></div>
                   </div>
                   <button onClick={() => onNav("tasks")} className="mt-0.5 flex-shrink-0 text-xs font-black text-[var(--hh-primary)] hover:opacity-60">Renew</button>
@@ -304,15 +339,24 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
           </div>
         </div>
         <div>
-          <div className="mb-3 flex items-center gap-2"><Clock className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-black tracking-tight text-foreground">Recent Activity</h2></div>
+          <div className="mb-3 flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-black tracking-tight text-foreground">Action Receipts</h2></div>
           <div className="space-y-2">
-            {[...data.maintenance.slice(-2).map((item) => ({ id: `m-${item.id}`, title: item.title, detail: `${propertyName(data, item.propertyId)} - ${item.status}`, Icon: Wrench })), ...data.docs.slice(-2).map((doc) => ({ id: `d-${doc.id}`, title: doc.name, detail: `${propertyName(data, doc.propertyId)} - ${doc.type}`, Icon: FileText }))].reverse().map(({ id, title, detail, Icon }) => (
-              <div key={id} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-success-bg)]"><Icon className="h-4 w-4 text-[var(--hh-success)]" /></div>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-black text-foreground">{title}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p></div>
+            {activity.map((item) => (
+              <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
+                <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${item.tone === "urgent" ? "bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]" : item.tone === "warning" ? "bg-[var(--hh-warning-bg)] text-[var(--hh-warning)]" : item.tone === "success" ? "bg-[var(--hh-success-bg)] text-[var(--hh-success)]" : "bg-muted text-muted-foreground"}`}>
+                  <CheckCircle2 className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm font-black leading-tight text-foreground">{item.title}</p>
+                    <span className="flex-shrink-0 text-[10px] font-black uppercase tracking-wide text-muted-foreground">{activityTime(item.at)}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{item.detail}</p>
+                  <p className="mt-2 rounded-lg bg-background px-2.5 py-1.5 text-xs font-bold leading-5 text-foreground">{item.outcome}</p>
+                </div>
               </div>
             ))}
-            {data.maintenance.length === 0 && data.docs.length === 0 && <EmptyState icon={Clock} title="No recent activity" subtitle="New maintenance and documents will appear here." />}
+            {activity.length === 0 && <EmptyState icon={Clock} title="No action receipts yet" subtitle="Saves, uploads, completions, and status changes will appear here." />}
           </div>
         </div>
       </section>
@@ -1326,22 +1370,34 @@ export default function App() {
         const previous = editing?.kind === "property" ? editing.item : null;
         const imageUrl = String(payload.imageUrl || "").trim() || previous?.imageUrl || DEFAULT_IMAGES[current.properties.length % DEFAULT_IMAGES.length];
         const nextProperty = { id: previous?.id || uid("p"), name: String(payload.name), address: String(payload.address), city: String(payload.city), units: Number(payload.units || 1), imageUrl };
-        return { ...current, properties: previous ? current.properties.map((property) => property.id === previous.id ? nextProperty : property) : [...current.properties, nextProperty] };
+        return withActivity(
+          { ...current, properties: previous ? current.properties.map((property) => property.id === previous.id ? nextProperty : property) : [...current.properties, nextProperty] },
+          { title: previous ? "Property updated" : "Property added", detail: nextProperty.name, outcome: previous ? "Changes saved to the portfolio" : "Property is ready for tenants, tasks, maintenance, and documents", tone: "success", tab: "properties", propertyId: nextProperty.id },
+        );
       }
       if (kind === "tenant") {
         const previous = editing?.kind === "tenant" ? editing.item : null;
         const nextTenant = { id: previous?.id || uid("t"), name: String(payload.name), phone: String(payload.phone || ""), email: String(payload.email || ""), propertyId: String(payload.propertyId), unit: String(payload.unit), rent: Number(payload.rent || 0), leaseStart: String(payload.leaseStart), leaseEnd: String(payload.leaseEnd), status: payload.status as Tenant["status"], notes: String(payload.notes || "") };
-        return { ...current, tenants: previous ? current.tenants.map((tenant) => tenant.id === previous.id ? nextTenant : tenant) : [...current.tenants, nextTenant] };
+        return withActivity(
+          { ...current, tenants: previous ? current.tenants.map((tenant) => tenant.id === previous.id ? nextTenant : tenant) : [...current.tenants, nextTenant] },
+          { title: previous ? "Tenant updated" : "Tenant added", detail: `${nextTenant.name} at ${propertyName(current, nextTenant.propertyId)} - ${nextTenant.unit}`, outcome: nextTenant.status === "expiring" ? "Lease renewal now appears in attention items" : "Tenant record is saved and linked to the property", tone: nextTenant.status === "expiring" || nextTenant.status === "expired" ? "warning" : "success", tab: "properties", propertyId: nextTenant.propertyId },
+        );
       }
       if (kind === "maintenance") {
         const previous = editing?.kind === "maintenance" ? editing.item : null;
         const nextMaintenance = { id: previous?.id || uid("m"), title: String(payload.title), description: String(payload.description), propertyId: String(payload.propertyId), unit: String(payload.unit || ""), tenantName: String(payload.tenantName || ""), status: payload.status as MaintenanceItem["status"], priority: payload.priority as MaintenanceItem["priority"], date: String(payload.date), vendor: String(payload.vendor || "") };
-        return { ...current, maintenance: previous ? current.maintenance.map((item) => item.id === previous.id ? nextMaintenance : item) : [...current.maintenance, nextMaintenance] };
+        return withActivity(
+          { ...current, maintenance: previous ? current.maintenance.map((item) => item.id === previous.id ? nextMaintenance : item) : [...current.maintenance, nextMaintenance] },
+          { title: previous ? "Maintenance updated" : "Maintenance logged", detail: `${nextMaintenance.title} at ${propertyName(current, nextMaintenance.propertyId)}`, outcome: maintenanceNextAction(nextMaintenance), tone: nextMaintenance.status === "resolved" ? "success" : nextMaintenance.priority === "high" ? "urgent" : "warning", tab: "properties", propertyId: nextMaintenance.propertyId },
+        );
       }
       if (kind === "task") {
         const previous = editing?.kind === "task" ? editing.item : null;
         const nextTask = { id: previous?.id || uid("tk"), title: String(payload.title), type: payload.type as TaskItem["type"], propertyId: String(payload.propertyId || ""), dueDate: String(payload.dueDate), status: (payload.status || previous?.status || "pending") as TaskItem["status"], priority: payload.priority as TaskItem["priority"] };
-        return { ...current, tasks: previous ? current.tasks.map((task) => task.id === previous.id ? nextTask : task) : [...current.tasks, nextTask] };
+        return withActivity(
+          { ...current, tasks: previous ? current.tasks.map((task) => task.id === previous.id ? nextTask : task) : [...current.tasks, nextTask] },
+          { title: previous ? "Task updated" : "Task added", detail: `${nextTask.title} - ${propertyName(current, nextTask.propertyId)}`, outcome: nextTask.status === "done" ? "Marked complete" : `Visible in tasks until ${nextTask.dueDate}`, tone: nextTask.status === "done" ? "success" : nextTask.priority === "high" ? "urgent" : "warning", tab: "tasks", propertyId: nextTask.propertyId || undefined },
+        );
       }
       const previous = editing?.kind === "document" ? editing.item : null;
       const nextDoc = {
@@ -1357,7 +1413,10 @@ export default function App() {
         mimeType: uploadedDocPatch.mimeType || previous?.mimeType,
         uploadedAt: uploadedDocPatch.uploadedAt || previous?.uploadedAt,
       };
-      return { ...current, docs: previous ? current.docs.map((doc) => doc.id === previous.id ? nextDoc : doc) : [...current.docs, nextDoc] };
+      return withActivity(
+        { ...current, docs: previous ? current.docs.map((doc) => doc.id === previous.id ? nextDoc : doc) : [...current.docs, nextDoc] },
+        { title: previous ? "Document updated" : "Document uploaded", detail: `${nextDoc.name} - ${propertyName(current, nextDoc.propertyId)}`, outcome: nextDoc.filePath ? "File is attached and ready to open" : "Document record is saved without an attached file", tone: nextDoc.filePath ? "success" : "neutral", tab: "documents", propertyId: nextDoc.propertyId },
+      );
       });
       track(editing ? "record_updated" : "record_created", { kind });
       showToast(editing ? "Changes saved." : "Added successfully.");
@@ -1375,19 +1434,30 @@ export default function App() {
 
     setData((current) => {
       if (kind === "property") {
-        return {
+        const removed = current.properties.find((property) => property.id === id);
+        return withActivity({
           ...current,
           properties: current.properties.filter((property) => property.id !== id),
           tenants: current.tenants.filter((tenant) => tenant.propertyId !== id),
           maintenance: current.maintenance.filter((item) => item.propertyId !== id),
           docs: current.docs.filter((doc) => doc.propertyId !== id),
           tasks: current.tasks.map((task) => task.propertyId === id ? { ...task, propertyId: "" } : task),
-        };
+        }, { title: "Property deleted", detail: removed?.name || "Property removed", outcome: "Related tenants, maintenance, and documents were removed from the portfolio", tone: "warning", tab: "properties" });
       }
-      if (kind === "tenant") return { ...current, tenants: current.tenants.filter((tenant) => tenant.id !== id) };
-      if (kind === "maintenance") return { ...current, maintenance: current.maintenance.filter((item) => item.id !== id) };
-      if (kind === "task") return { ...current, tasks: current.tasks.filter((task) => task.id !== id) };
-      return { ...current, docs: current.docs.filter((doc) => doc.id !== id) };
+      if (kind === "tenant") {
+        const removed = current.tenants.find((tenant) => tenant.id === id);
+        return withActivity({ ...current, tenants: current.tenants.filter((tenant) => tenant.id !== id) }, { title: "Tenant deleted", detail: removed?.name || "Tenant removed", outcome: "Tenant is no longer active in this portfolio", tone: "warning", tab: "properties", propertyId: removed?.propertyId });
+      }
+      if (kind === "maintenance") {
+        const removed = current.maintenance.find((item) => item.id === id);
+        return withActivity({ ...current, maintenance: current.maintenance.filter((item) => item.id !== id) }, { title: "Maintenance deleted", detail: removed?.title || "Maintenance request removed", outcome: "Request was removed from open work", tone: "warning", tab: "properties", propertyId: removed?.propertyId });
+      }
+      if (kind === "task") {
+        const removed = current.tasks.find((task) => task.id === id);
+        return withActivity({ ...current, tasks: current.tasks.filter((task) => task.id !== id) }, { title: "Task deleted", detail: removed?.title || "Task removed", outcome: "Task is no longer in the work queue", tone: "warning", tab: "tasks", propertyId: removed?.propertyId || undefined });
+      }
+      const removed = current.docs.find((doc) => doc.id === id);
+      return withActivity({ ...current, docs: current.docs.filter((doc) => doc.id !== id) }, { title: "Document deleted", detail: removed?.name || "Document removed", outcome: "Document is no longer listed in files", tone: "warning", tab: "documents", propertyId: removed?.propertyId });
     });
     track("record_deleted", { kind });
     showToast("Deleted.");
@@ -1398,18 +1468,32 @@ export default function App() {
   }
 
   function updateMaintenance(id: string, status: MaintenanceItem["status"]) {
-    setData((current) => ({ ...current, maintenance: current.maintenance.map((item) => item.id === id ? { ...item, status } : item) }));
+    setData((current) => {
+      const nextItem = current.maintenance.find((item) => item.id === id);
+      const updated = nextItem ? { ...nextItem, status } : null;
+      return withActivity(
+        { ...current, maintenance: current.maintenance.map((item) => item.id === id ? { ...item, status } : item) },
+        { title: status === "resolved" ? "Maintenance resolved" : "Maintenance reopened", detail: updated ? `${updated.title} at ${propertyName(current, updated.propertyId)}` : "Maintenance status changed", outcome: updated ? maintenanceNextAction(updated) : "Status updated", tone: status === "resolved" ? "success" : "warning", tab: "properties", propertyId: updated?.propertyId },
+      );
+    });
     showToast(status === "resolved" ? "Maintenance marked resolved." : "Maintenance reopened.");
   }
 
   function toggleTask(id: string) {
-    setData((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, status: task.status === "done" ? "pending" : "done" } : task) }));
+    setData((current) => {
+      const task = current.tasks.find((item) => item.id === id);
+      const done = task?.status !== "done";
+      return withActivity(
+        { ...current, tasks: current.tasks.map((item) => item.id === id ? { ...item, status: item.status === "done" ? "pending" : "done" } : item) },
+        { title: done ? "Task completed" : "Task reopened", detail: task?.title || "Task status changed", outcome: done ? "No longer shown as open work" : "Back in the work queue", tone: done ? "success" : "warning", tab: "tasks", propertyId: task?.propertyId || undefined },
+      );
+    });
     showToast("Task updated.");
   }
 
   function resetData() {
     localStorage.removeItem("keystone-rental-data");
-    setData(INITIAL_DATA);
+    setData(withActivity(INITIAL_DATA, { title: "Demo data reset", detail: "Sample portfolio restored", outcome: "Dashboard, tasks, documents, and maintenance are back to the starter data", tone: "neutral", tab: "dashboard" }));
     showToast("Demo data reset.");
   }
 
@@ -1437,6 +1521,15 @@ export default function App() {
           priority: "medium",
         }],
         docs: [],
+        activity: [{
+          id: uid("a"),
+          at: new Date().toISOString(),
+          title: "Workspace created",
+          detail: setup.property.name,
+          outcome: "Next step: add your first tenant",
+          tone: "success",
+          tab: "properties",
+        }],
       });
     }
     localStorage.setItem("keystone-onboarding-complete", "true");
@@ -1481,7 +1574,11 @@ export default function App() {
 
   async function openDocument(filePath: string) {
     try {
+      const doc = data.docs.find((item) => item.filePath === filePath);
       await openDocumentFile(filePath);
+      if (doc) {
+        setData((current) => withActivity(current, { title: "Document opened", detail: doc.name, outcome: "Signed link opened in a new tab", tone: "success", tab: "documents", propertyId: doc.propertyId }));
+      }
       track("document_opened");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Document could not be opened.", "error");
@@ -1502,6 +1599,7 @@ export default function App() {
     link.download = "home-harbor-rental-data.json";
     link.click();
     URL.revokeObjectURL(url);
+    setData((current) => withActivity(current, { title: "Portfolio exported", detail: `${data.properties.length} properties, ${data.tenants.length} tenants`, outcome: "A backup JSON file downloaded to this device", tone: "success", tab: "settings" }));
     track("data_exported", { properties: data.properties.length, tenants: data.tenants.length });
     showToast("Export downloaded.");
   }

@@ -51,4 +51,9 @@ export const INITIAL_DATA: AppData = {
     { id: "d4", name: "Move-in Inspection - Diana Reyes", type: "inspection", propertyId: "p3", tenantName: "Diana Reyes", date: "Oct 1, 2024", size: "1.2 MB" },
     { id: "d5", name: "HVAC Service Report", type: "receipt", propertyId: "p1", tenantName: "", date: "Mar 15, 2025", size: "412 KB" },
   ],
+  activity: [
+    { id: "a1", at: new Date().toISOString(), title: "Portfolio opened", detail: "Today view checked", outcome: "Attention list refreshed", tone: "neutral", tab: "dashboard" },
+    { id: "a2", at: new Date(Date.now() - 1000 * 60 * 45).toISOString(), title: "Maintenance reviewed", detail: "Heater not working at Pine Avenue Triplex", outcome: "Still waiting on owner action", tone: "urgent", tab: "properties", propertyId: "p2" },
+    { id: "a3", at: new Date(Date.now() - 1000 * 60 * 90).toISOString(), title: "Document available", detail: "HVAC Service Report attached to Maple Street Duplex", outcome: "Saved in documents", tone: "success", tab: "documents", propertyId: "p1" },
+  ],
 };

@@ -69,12 +69,24 @@ export interface DocItem {
   uploadedAt?: string;
 }
 
+export interface ActivityItem {
+  id: string;
+  at: string;
+  title: string;
+  detail: string;
+  outcome: string;
+  tone: "success" | "warning" | "urgent" | "neutral";
+  tab: Tab;
+  propertyId?: string;
+}
+
 export interface AppData {
   properties: Property[];
   tenants: Tenant[];
   maintenance: MaintenanceItem[];
   tasks: TaskItem[];
   docs: DocItem[];
+  activity: ActivityItem[];
 }
 
 export interface AppProfile {
