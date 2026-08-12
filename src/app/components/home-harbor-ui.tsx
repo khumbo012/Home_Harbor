@@ -1,9 +1,11 @@
 import React from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowLeft,
   Calendar,
   CheckCircle2,
+  ChevronRight,
   FileText,
   MapPin,
   Pencil,
@@ -14,7 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DEFAULT_IMAGES } from "../data";
-import type { AppData, DocItem, Property, TaskItem } from "../types";
+import type { ActivityItem, AppData, DocItem, Property, Tab, TaskItem } from "../types";
 import {
   daysUntil,
   docColor,
@@ -145,6 +147,153 @@ export function SkeletonLoader({ rows = 3 }: { rows?: number }) {
           <div className="mt-3 h-3 w-3/4 rounded-full bg-muted" />
           <div className="mt-3 h-2 w-1/2 rounded-full bg-muted" />
         </div>
+      ))}
+    </div>
+  );
+}
+
+export function SectionHeader({ title, eyebrow, actionLabel, onAction }: { title: string; eyebrow?: string; actionLabel?: string; onAction?: () => void }) {
+  return (
+    <div className="mb-3 flex items-end justify-between gap-4">
+      <div className="min-w-0">
+        {eyebrow && <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{eyebrow}</p>}
+        <h2 className="text-[15px] font-semibold leading-tight text-foreground">{title}</h2>
+      </div>
+      {actionLabel && onAction && (
+        <button onClick={onAction} className="flex-shrink-0 text-xs font-semibold text-[var(--hh-primary)] transition-opacity hover:opacity-70">
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function StatusIndicator({ tone, label }: { tone: "urgent" | "warning" | "success" | "neutral"; label: string }) {
+  const toneClass = tone === "urgent"
+    ? "bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]"
+    : tone === "warning"
+      ? "bg-[var(--hh-warning-bg)] text-[var(--hh-warning)]"
+      : tone === "success"
+        ? "bg-[var(--hh-success-bg)] text-[var(--hh-success)]"
+        : "bg-muted text-muted-foreground";
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none ${toneClass}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {label}
+    </span>
+  );
+}
+
+export function TodayPriority({ action, onPrimary, onCreateTask }: { action: { eyebrow: string; title: string; detail: string; reason: string; cta: string; tone: "urgent" | "warning" | "success" | "neutral"; icon: LucideIcon } | null; onPrimary?: () => void; onCreateTask: () => void }) {
+  const Icon = action?.icon || CheckCircle2;
+  const calm = !action;
+  return (
+    <section className="px-4 pb-6 pt-6 lg:pt-8">
+      <div className="mx-auto max-w-5xl">
+        <div className="border-b border-border pb-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{action?.eyebrow || "Today"}</p>
+            <StatusIndicator tone={calm ? "success" : action.tone} label={calm ? "Clear" : action.reason} />
+          </div>
+          <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="min-w-0">
+              <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ${calm ? "bg-[var(--hh-success-bg)] text-[var(--hh-success)]" : action.tone === "urgent" ? "bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]" : "bg-[var(--hh-warning-bg)] text-[var(--hh-warning)]"}`}>
+                <Icon className="h-5 w-5" />
+              </div>
+              <h1 className="max-w-3xl text-3xl font-semibold leading-[1.08] text-foreground sm:text-4xl">
+                {action?.title || "Your rentals are steady today."}
+              </h1>
+              <p className="mt-3 max-w-2xl text-[15px] leading-7 text-muted-foreground">
+                {action?.detail || "No urgent owner decision is waiting. You can add a task, upload a document, or review your upcoming work when you are ready."}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+              <Button onClick={action ? onPrimary : onCreateTask} className="min-w-[150px]">
+                {action?.cta || "Add task"}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              {action && (
+                <Button variant="secondary" onClick={onCreateTask} className="min-w-[150px]">
+                  Add task
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function ActionItemRow({ icon: Icon, title, meta, reason, tone, status, actionLabel, onClick }: { icon: LucideIcon; title: string; meta: string; reason: string; tone: "urgent" | "warning" | "success" | "neutral"; status: string; actionLabel: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="group flex w-full items-start gap-3 border-b border-border px-0 py-4 text-left transition-colors last:border-b-0 hover:bg-white/55 active:scale-[0.995] sm:px-2">
+      <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl ${tone === "urgent" ? "bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]" : tone === "warning" ? "bg-[var(--hh-warning-bg)] text-[var(--hh-warning)]" : tone === "success" ? "bg-[var(--hh-success-bg)] text-[var(--hh-success)]" : "bg-muted text-muted-foreground"}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="min-w-0 flex-1 text-[15px] font-semibold leading-tight text-foreground">{title}</p>
+          <StatusIndicator tone={tone} label={status} />
+        </div>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{meta}</p>
+        <p className="mt-1.5 text-sm leading-6 text-foreground/80">{reason}</p>
+      </div>
+      <span className="mt-1 hidden flex-shrink-0 items-center gap-1 text-xs font-semibold text-[var(--hh-primary)] sm:flex">
+        {actionLabel}
+        <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+      </span>
+    </button>
+  );
+}
+
+export function UpcomingItemRow({ title, meta, timing, onClick }: { title: string; meta: string; timing: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex w-full items-center gap-3 border-b border-border py-3 text-left transition-colors last:border-b-0 hover:bg-white/45 active:scale-[0.995]">
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-warning-bg)] text-[var(--hh-warning)]">
+        <Calendar className="h-3.5 w-3.5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
+      </div>
+      <span className="flex-shrink-0 text-xs font-semibold text-muted-foreground">{timing}</span>
+    </button>
+  );
+}
+
+export function PortfolioHealthSummary({ stats, onOpen }: { stats: { label: string; value: string; detail?: string; tone?: "urgent" | "warning" | "success" | "neutral" }[]; onOpen: () => void }) {
+  return (
+    <button onClick={onOpen} className="w-full rounded-[1.35rem] border border-border bg-card/70 p-4 text-left transition-all hover:bg-white active:scale-[0.995]">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {stats.map((item) => (
+          <div key={item.label} className="min-w-0">
+            <p className="text-xl font-semibold leading-none text-foreground">{item.value}</p>
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</p>
+            {item.detail && <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.detail}</p>}
+          </div>
+        ))}
+      </div>
+    </button>
+  );
+}
+
+export function ActivityFeed({ activity, onOpen }: { activity: ActivityItem[]; onOpen: (tab: Tab) => void }) {
+  if (activity.length === 0) {
+    return <EmptyState icon={CheckCircle2} title="No recent receipts yet" subtitle="Saves, uploads, completions, and status changes will appear here." />;
+  }
+
+  return (
+    <div className="divide-y divide-border">
+      {activity.map((item) => (
+        <button key={item.id} onClick={() => onOpen(item.tab)} className="flex w-full items-start gap-3 py-3 text-left transition-colors hover:bg-white/45 active:scale-[0.995]">
+          <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${item.tone === "urgent" ? "bg-[var(--hh-urgent)]" : item.tone === "warning" ? "bg-[var(--hh-warning)]" : item.tone === "success" ? "bg-[var(--hh-success)]" : "bg-muted-foreground/40"}`} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold leading-tight text-foreground">{item.title}</span>
+            <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.detail}</span>
+          </span>
+        </button>
       ))}
     </div>
   );

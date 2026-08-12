@@ -37,19 +37,23 @@ import {
 import { AppShell } from "./components/app-shell";
 import {
   AddButton,
+  ActionItemRow,
+  ActivityFeed,
   Button,
   Chip,
   DocumentCard,
   EmptyState,
   IconAction,
   PageHeader,
+  PortfolioHealthSummary,
   PropertyCard,
-  QuickAction,
   SearchAndFilterBar,
+  SectionHeader,
   SkeletonLoader,
   StatusBadge,
-  StatusCard,
+  TodayPriority,
   TaskCard,
+  UpcomingItemRow,
 } from "./components/home-harbor-ui";
 import { DEFAULT_IMAGES, DEFAULT_PROFILE, INITIAL_DATA } from "./data";
 import {
@@ -84,6 +88,7 @@ import {
   docColor,
   fileSizeLabel,
   formatToday,
+  formatReminderTiming,
   money,
   priorityStyle,
   propertyName,
@@ -166,6 +171,94 @@ function leaseNextAction(tenant: Tenant) {
   return tenant.status === "expired" ? "Contact tenant and document the decision." : "Send renewal terms or add a renewal task.";
 }
 
+type DashboardAction = {
+  id: string;
+  kind: "maintenance" | "lease" | "task";
+  title: string;
+  meta: string;
+  detail: string;
+  reason: string;
+  status: string;
+  cta: string;
+  score: number;
+  tone: "urgent" | "warning" | "success" | "neutral";
+  icon: typeof Wrench;
+  tab: Tab;
+  propertyId?: string;
+};
+
+function taskActionLabel(task: TaskItem) {
+  if (task.type === "lease") return "Review lease";
+  if (task.type === "inspection") return "View inspection";
+  if (task.type === "maintenance") return "Review work";
+  if (task.type === "financial") return "Review renewal";
+  return "Open task";
+}
+
+function buildDashboardActions(data: AppData): DashboardAction[] {
+  const maintenanceActions = data.maintenance
+    .filter((item) => item.status !== "resolved")
+    .map((item) => ({
+      id: `maintenance-${item.id}`,
+      kind: "maintenance" as const,
+      title: item.status === "in-progress" ? `Check ${item.title.toLowerCase()}` : `Assign owner for ${item.title.toLowerCase()}`,
+      meta: `${propertyName(data, item.propertyId)}${item.unit ? ` - ${item.unit}` : ""}${item.tenantName ? ` - ${item.tenantName}` : ""}`,
+      detail: maintenanceNextAction(item),
+      reason: item.priority === "high" ? "High priority maintenance" : item.status === "open" ? "Needs owner decision" : "In progress",
+      status: item.priority === "high" ? "Urgent" : item.status === "open" ? "Owner action" : "Waiting",
+      cta: item.vendor ? "Review request" : "Assign vendor",
+      score: (item.priority === "high" ? 100 : item.priority === "medium" ? 55 : 25) + (item.status === "open" ? 20 : 0),
+      tone: item.priority === "high" ? "urgent" as const : "warning" as const,
+      icon: Wrench,
+      tab: "properties" as const,
+      propertyId: item.propertyId,
+    }));
+
+  const leaseActions = data.tenants
+    .map((tenant) => ({ tenant, days: daysUntil(tenant.leaseEnd) }))
+    .filter(({ tenant, days }) => tenant.status !== "active" || (days !== null && days <= 45))
+    .map(({ tenant, days }) => ({
+      id: `lease-${tenant.id}`,
+      kind: "lease" as const,
+      title: `${tenant.status === "expired" ? "Resolve" : "Renew"} ${tenant.name}'s lease`,
+      meta: `${propertyName(data, tenant.propertyId)} - ${tenant.unit}`,
+      detail: leaseNextAction(tenant),
+      reason: days === null ? "Lease date needs review" : formatReminderTiming(days),
+      status: tenant.status === "expired" || (days !== null && days <= 14) ? "Urgent" : "Upcoming",
+      cta: tenant.status === "expired" ? "Review lease" : "Renew lease",
+      score: tenant.status === "expired" ? 95 : days === null ? 45 : days <= 14 ? 85 : days <= 30 ? 62 : 38,
+      tone: tenant.status === "expired" || (days !== null && days <= 14) ? "urgent" as const : "warning" as const,
+      icon: Calendar,
+      tab: "tasks" as const,
+      propertyId: tenant.propertyId,
+    }));
+
+  const taskActions = data.tasks
+    .filter((task) => task.status === "pending")
+    .map((task) => {
+      const days = daysUntil(task.dueDate);
+      const overdue = days !== null && days < 0;
+      const soon = days === null || days <= 14;
+      return {
+        id: `task-${task.id}`,
+        kind: "task" as const,
+        title: task.title,
+        meta: `${propertyName(data, task.propertyId)} - ${task.type}`,
+        detail: `${taskActionLabel(task)} before this leaves your active queue.`,
+        reason: formatReminderTiming(days),
+        status: overdue || task.priority === "high" ? "Urgent" : soon ? "Upcoming" : "Planned",
+        cta: taskActionLabel(task),
+        score: (overdue ? 82 : soon ? 44 : 12) + (task.priority === "high" ? 30 : task.priority === "medium" ? 12 : 0),
+        tone: overdue || task.priority === "high" ? "urgent" as const : soon ? "warning" as const : "neutral" as const,
+        icon: task.type === "inspection" ? ClipboardList : task.type === "maintenance" ? Wrench : task.type === "financial" ? DollarSign : CheckSquare,
+        tab: "tasks" as const,
+        propertyId: task.propertyId || undefined,
+      };
+    });
+
+  return [...maintenanceActions, ...leaseActions, ...taskActions].sort((a, b) => b.score - a.score);
+}
+
 function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onToggleNotifications, onAddTask, onAddMaintenance, onAddDocument, onOpenProperty }: { data: AppData; profile: AppProfile; reminders: ReminderItem[]; notificationsEnabled: boolean; onNav: (tab: Tab) => void; onToggleNotifications: () => void; onAddTask: () => void; onAddMaintenance: () => void; onAddDocument: () => void; onOpenProperty: (id: string) => void }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const totals = useMemo(() => {
@@ -188,38 +281,51 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
     return { units, revenue, openMaintenance, urgent, expiring, pendingTasks, overdueTasks, dueSoonTasks };
   }, [data]);
   const vacant = Math.max(totals.units - data.tenants.length, 0);
-  const attentionCount = totals.urgent.length + totals.expiring.length + totals.overdueTasks.length;
-  const calm = attentionCount === 0;
+  const actions = useMemo(() => buildDashboardActions(data), [data]);
+  const priority = actions[0] || null;
+  const ownerActions = actions.slice(0, 5);
+  const upcoming = actions.filter((action) => action.tone !== "urgent").slice(0, 4);
+  const occupiedUnits = Math.min(data.tenants.length, totals.units);
+  const healthStats = [
+    { label: "Properties", value: String(data.properties.length), detail: `${totals.units} total units` },
+    { label: "Occupied", value: `${occupiedUnits}/${totals.units || 0}`, detail: vacant > 0 ? `${vacant} vacant` : "Fully occupied", tone: vacant > 0 ? "warning" as const : "success" as const },
+    { label: "Open work", value: String(totals.openMaintenance.length), detail: totals.urgent.length > 0 ? `${totals.urgent.length} urgent` : "No urgent requests", tone: totals.urgent.length > 0 ? "urgent" as const : "success" as const },
+    { label: "Rent roll", value: money(totals.revenue), detail: "Monthly tracked" },
+  ];
   const activity = (data.activity || []).slice(0, 5);
+  const priorityCard = priority && {
+    eyebrow: formatToday(),
+    title: priority.title,
+    detail: `${priority.meta}. ${priority.detail}`,
+    reason: priority.reason,
+    cta: priority.cta,
+    tone: priority.tone,
+    icon: priority.icon,
+  };
+  const openPriority = () => {
+    if (!priority) return;
+    if (priority.propertyId && priority.tab === "properties") onOpenProperty(priority.propertyId);
+    else onNav(priority.tab);
+  };
 
   return (
-    <div className="mx-auto w-full max-w-6xl pb-24 lg:pb-10">
-      <div className="px-4 pb-3 pt-6 lg:pt-8">
-        <div className="rounded-[1.75rem] border border-border bg-card/90 p-5 shadow-[var(--hh-shadow-sm)] lg:p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{formatToday()}</p>
-              <h1 className="mt-2 text-2xl font-semibold leading-tight text-foreground lg:text-3xl">Good morning, {profile.name.split(" ")[0] || "there"}.</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                {calm ? "Nothing urgent is blocking your portfolio right now." : `${attentionCount} item${attentionCount === 1 ? "" : "s"} need attention before the day gets away from you.`}
-              </p>
-            </div>
-            <button onClick={() => setShowNotifications((visible) => !visible)} className="relative flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30" aria-label="Notifications">
-            <Bell className="h-5 w-5 text-foreground/60" />
-            {reminders.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-[var(--hh-urgent)] px-1 text-[10px] font-semibold text-white">{reminders.length > 9 ? "9+" : reminders.length}</span>}
-            </button>
-          </div>
-          <div className="mt-5 grid gap-2 sm:grid-cols-3">
-            <QuickAction icon={CheckSquare} label="Add task" detail="Renewals, follow-ups, inspections" primary onClick={onAddTask} />
-            <QuickAction icon={Wrench} label="Log maintenance" detail="Capture an issue before it slips" onClick={onAddMaintenance} />
-            <QuickAction icon={Upload} label="Upload document" detail="Store leases, receipts, notices" onClick={onAddDocument} />
-          </div>
+    <div className="mx-auto w-full max-w-5xl pb-24 lg:pb-12">
+      <div className="flex items-center justify-between px-4 pt-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Home Harbor</p>
+          <p className="mt-1 text-sm text-muted-foreground">Good morning, {profile.name.split(" ")[0] || "there"}.</p>
         </div>
+        <button onClick={() => setShowNotifications((visible) => !visible)} className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30" aria-label="Notifications">
+          <Bell className="h-5 w-5 text-foreground/60" />
+          {reminders.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-[var(--hh-urgent)] px-1 text-[10px] font-semibold text-white">{reminders.length > 9 ? "9+" : reminders.length}</span>}
+        </button>
       </div>
 
+      <TodayPriority action={priorityCard} onPrimary={openPriority} onCreateTask={onAddTask} />
+
       {showNotifications && (
-        <section className="px-4 pb-4">
-          <div className="rounded-[1.35rem] border border-border bg-card/90 p-4 shadow-[var(--hh-shadow-sm)]">
+        <section className="px-4 pb-6">
+          <div className="rounded-[1.35rem] border border-border bg-card/80 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">Reminders</p>
@@ -247,117 +353,72 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
         </section>
       )}
 
-      <div className="grid gap-3 px-4 pb-6 pt-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatusCard label="Needs attention" value={String(attentionCount)} detail={calm ? "No urgent work" : "Urgent, overdue, or expiring"} icon={AlertTriangle} tone={attentionCount > 0 ? "urgent" : "good"} />
-        <StatusCard label="Due soon" value={String(totals.dueSoonTasks.length)} detail="Next 14 days" icon={Clock} tone={totals.dueSoonTasks.length > 0 ? "warning" : "neutral"} />
-        <StatusCard label="Open requests" value={String(totals.openMaintenance.length)} detail={`${totals.urgent.length} urgent maintenance`} icon={Wrench} tone={totals.urgent.length > 0 ? "urgent" : "neutral"} />
-        <StatusCard label="Portfolio" value={`${data.properties.length}`} detail={`${totals.units} units, ${vacant} vacant`} icon={Building2} />
-      </div>
-
-      {(totals.urgent.length > 0 || totals.expiring.length > 0) && (
-        <section className="mb-6 px-4">
-          <div className="mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-[var(--hh-warning)]" />
-            <h2 className="text-sm font-semibold tracking-normal text-foreground">Needs Attention</h2>
-          </div>
-          <div className="space-y-2.5">
-            {totals.urgent.map((item) => (
-              <div key={item.id} className="rounded-[1.35rem] border border-[var(--hh-urgent-border)] bg-card/90 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-urgent-bg)]"><Wrench className="h-4 w-4 text-[var(--hh-urgent)]" /></div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold leading-tight text-foreground">{item.title}</p>
-                    <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, item.propertyId)} - {item.unit} - {item.tenantName}</p>
-                    <p className="mt-2 rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">Next action: {maintenanceNextAction(item)}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <StatusBadge status={item.status} />
-                      <Chip className={priorityStyle(item.priority)}>High</Chip>
-                    </div>
-                  </div>
-                  <button onClick={() => onNav("properties")} className="mt-0.5 flex-shrink-0 text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60">View</button>
-                </div>
-              </div>
-            ))}
-            {totals.expiring.map((tenant) => (
-              <div key={tenant.id} className="rounded-[1.35rem] border border-[var(--hh-warning-border)] bg-card/90 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-warning-bg)]"><Calendar className="h-4 w-4 text-[var(--hh-warning)]" /></div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold leading-tight text-foreground">Lease expiring - {tenant.name}</p>
-                    <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, tenant.propertyId)} - {tenant.unit} - ends {tenant.leaseEnd}</p>
-                    <p className="mt-2 rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">Next action: {leaseNextAction(tenant)}</p>
-                    <div className="mt-2"><StatusBadge status={tenant.status} /></div>
-                  </div>
-                  <button onClick={() => onNav("tasks")} className="mt-0.5 flex-shrink-0 text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60">Renew</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="mb-6 px-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2"><ClipboardList className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-semibold tracking-normal text-foreground">Overdue & Due Soon</h2></div>
-          <button onClick={() => onNav("tasks")} className="text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">See all</button>
-        </div>
-        <div className="space-y-2">
-          {[...totals.overdueTasks, ...totals.dueSoonTasks.filter((task) => !totals.overdueTasks.some((overdue) => overdue.id === task.id))].slice(0, 6).map((task) => (
-            <TaskCard key={task.id} data={data} task={task} compact />
+      <section className="px-4 pb-8">
+        <SectionHeader title="Needs Owner Action" eyebrow={`${ownerActions.length} prioritized`} />
+        <div className="rounded-[1.35rem] border border-border bg-card/70 px-4">
+          {ownerActions.length === 0 ? (
+            <EmptyState icon={CheckCircle2} title="No owner decisions waiting" subtitle="Your urgent work is clear for now." />
+          ) : ownerActions.map((action) => (
+            <ActionItemRow
+              key={action.id}
+              icon={action.icon}
+              title={action.title}
+              meta={action.meta}
+              reason={action.detail}
+              tone={action.tone}
+              status={action.status}
+              actionLabel={action.cta}
+              onClick={() => action.propertyId && action.tab === "properties" ? onOpenProperty(action.propertyId) : onNav(action.tab)}
+            />
           ))}
-          {totals.pendingTasks.length === 0 && <EmptyState icon={CheckCircle2} title="All caught up" subtitle="No open tasks right now." />}
-          {totals.pendingTasks.length > 0 && totals.overdueTasks.length === 0 && totals.dueSoonTasks.length === 0 && <EmptyState icon={Clock} title="Nothing pressing this week" subtitle="Your open tasks are scheduled farther out." />}
         </div>
       </section>
 
-      <section className="grid gap-6 px-4 lg:grid-cols-[1.15fr_0.85fr]">
-        <div>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-[var(--hh-primary)]" /><h2 className="text-sm font-semibold tracking-normal text-foreground">Property Status</h2></div>
-            <button onClick={() => onNav("properties")} className="text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60">Open properties</button>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {data.properties.slice(0, 4).map((property) => {
-              const stats = propertyStats(data, property.id);
-              const openIssues = data.maintenance.filter((item) => item.propertyId === property.id && item.status !== "resolved").length;
-              return (
-                <button key={property.id} onClick={() => onOpenProperty(property.id)} className="rounded-[1.35rem] border border-border bg-card/90 p-4 text-left transition-all hover:border-[var(--hh-primary)]/25 hover:shadow-[var(--hh-shadow-sm)] focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{property.name}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{stats.occupiedUnits}/{property.units} occupied</p>
-                    </div>
-                    <Chip className={openIssues > 0 ? "border-[var(--hh-urgent-border)] bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]" : "border-[var(--hh-success-border)] bg-[var(--hh-success-bg)] text-[var(--hh-success)]"}>{openIssues > 0 ? `${openIssues} open` : "Clear"}</Chip>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-[var(--hh-success)]" style={{ width: `${Math.min((stats.occupiedUnits / Math.max(property.units, 1)) * 100, 100)}%` }} />
-                  </div>
-                </button>
-              );
-            })}
-            {data.properties.length === 0 && <div className="sm:col-span-2"><EmptyState icon={Building2} title="Add your first property" subtitle="Once a property is added, status cards will appear here." /></div>}
-          </div>
+      <section className="px-4 pb-8">
+        <SectionHeader title="Coming Up" eyebrow="Soon" actionLabel="View all upcoming" onAction={() => onNav("tasks")} />
+        <div className="rounded-[1.35rem] border border-border bg-card/60 px-4">
+          {upcoming.length === 0 ? (
+            <EmptyState icon={Clock} title="Nothing pressing this week" subtitle="Open work scheduled farther out will stay in Tasks." />
+          ) : upcoming.map((action) => (
+            <UpcomingItemRow
+              key={action.id}
+              title={action.title}
+              meta={action.meta}
+              timing={action.reason}
+              onClick={() => action.propertyId && action.tab === "properties" ? onOpenProperty(action.propertyId) : onNav(action.tab)}
+            />
+          ))}
         </div>
-        <div>
-          <div className="mb-3 flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-semibold tracking-normal text-foreground">Action Receipts</h2></div>
-          <div className="space-y-2">
-            {activity.map((item) => (
-              <div key={item.id} className="flex items-start gap-3 rounded-[1.35rem] border border-border bg-card/90 p-4">
-                <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${item.tone === "urgent" ? "bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]" : item.tone === "warning" ? "bg-[var(--hh-warning-bg)] text-[var(--hh-warning)]" : item.tone === "success" ? "bg-[var(--hh-success-bg)] text-[var(--hh-success)]" : "bg-muted text-muted-foreground"}`}>
-                  <CheckCircle2 className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-semibold leading-tight text-foreground">{item.title}</p>
-                    <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{activityTime(item.at)}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{item.detail}</p>
-                  <p className="mt-2 rounded-lg bg-background px-2.5 py-1.5 text-xs font-bold leading-5 text-foreground">{item.outcome}</p>
-                </div>
-              </div>
-            ))}
-            {activity.length === 0 && <EmptyState icon={Clock} title="No action receipts yet" subtitle="Saves, uploads, completions, and status changes will appear here." />}
-          </div>
+      </section>
+
+      <section className="px-4 pb-8">
+        <SectionHeader title="Portfolio Health" eyebrow="At a glance" actionLabel="Open properties" onAction={() => onNav("properties")} />
+        <PortfolioHealthSummary stats={healthStats} onOpen={() => onNav("properties")} />
+      </section>
+
+      <section className="px-4 pb-6">
+        <SectionHeader title="Quick Capture" eyebrow="When something new comes in" />
+        <div className="grid gap-2 sm:grid-cols-3">
+          {[
+            { label: "Add task", detail: "Renewal, follow-up, inspection", Icon: CheckSquare, action: onAddTask },
+            { label: "Log maintenance", detail: "Capture an issue quickly", Icon: Wrench, action: onAddMaintenance },
+            { label: "Upload document", detail: "Lease, receipt, notice", Icon: Upload, action: onAddDocument },
+          ].map(({ label, detail, Icon, action }) => (
+            <button key={label} onClick={action} className="flex min-h-14 items-center gap-3 rounded-2xl border border-border bg-card/55 px-4 py-3 text-left transition-all hover:bg-white active:scale-[0.99]">
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[var(--hh-primary-soft)] text-[var(--hh-primary)]"><Icon className="h-4 w-4" /></span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">{label}</span>
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">{detail}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="px-4">
+        <SectionHeader title="Recent Receipts" eyebrow="Tracked for you" />
+        <div className="rounded-[1.35rem] border border-border bg-card/50 px-4">
+          <ActivityFeed activity={activity} onOpen={onNav} />
         </div>
       </section>
     </div>
