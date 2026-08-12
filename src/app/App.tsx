@@ -195,18 +195,18 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
   return (
     <div className="mx-auto w-full max-w-6xl pb-24 lg:pb-10">
       <div className="px-4 pb-3 pt-6 lg:pt-8">
-        <div className="rounded-3xl border border-border bg-card p-5 shadow-sm lg:p-6">
+        <div className="rounded-[1.75rem] border border-border bg-card/90 p-5 shadow-[var(--hh-shadow-sm)] lg:p-6">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{formatToday()}</p>
-              <h1 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground lg:text-3xl">Good morning, {profile.name.split(" ")[0] || "there"}.</h1>
+              <h1 className="mt-2 text-2xl font-semibold leading-tight text-foreground lg:text-3xl">Good morning, {profile.name.split(" ")[0] || "there"}.</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 {calm ? "Nothing urgent is blocking your portfolio right now." : `${attentionCount} item${attentionCount === 1 ? "" : "s"} need attention before the day gets away from you.`}
               </p>
             </div>
             <button onClick={() => setShowNotifications((visible) => !visible)} className="relative flex-shrink-0 rounded-xl p-2.5 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30" aria-label="Notifications">
             <Bell className="h-5 w-5 text-foreground/60" />
-            {reminders.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-[var(--hh-urgent)] px-1 text-[10px] font-black text-white">{reminders.length > 9 ? "9+" : reminders.length}</span>}
+            {reminders.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-[var(--hh-urgent)] px-1 text-[10px] font-semibold text-white">{reminders.length > 9 ? "9+" : reminders.length}</span>}
             </button>
           </div>
           <div className="mt-5 grid gap-2 sm:grid-cols-3">
@@ -219,13 +219,13 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
 
       {showNotifications && (
         <section className="px-4 pb-4">
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="rounded-[1.35rem] border border-border bg-card/90 p-4 shadow-[var(--hh-shadow-sm)]">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-black text-foreground">Reminders</p>
+                <p className="text-sm font-semibold text-foreground">Reminders</p>
                 <p className="text-xs text-muted-foreground">{notificationsEnabled ? "Browser notifications enabled" : "In-app reminders active"}</p>
               </div>
-              <button onClick={onToggleNotifications} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-black text-[var(--hh-primary)] focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">
+              <button onClick={onToggleNotifications} className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-[var(--hh-primary)] focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">
                 {notificationsEnabled ? "On" : "Enable"}
               </button>
             </div>
@@ -236,7 +236,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                 <button key={reminder.id} onClick={() => onNav(reminder.tab)} className="flex w-full items-start gap-3 rounded-xl bg-background px-3 py-3 text-left">
                   <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${reminder.severity === "high" ? "bg-[var(--hh-urgent)]" : reminder.severity === "medium" ? "bg-[var(--hh-warning)]" : "bg-slate-300"}`} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-black text-foreground">{reminder.title}</span>
+                    <span className="block text-xs font-semibold text-foreground">{reminder.title}</span>
                     <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{reminder.detail}</span>
                   </span>
                   <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
@@ -258,15 +258,15 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
         <section className="mb-6 px-4">
           <div className="mb-3 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-[var(--hh-warning)]" />
-            <h2 className="text-sm font-black tracking-tight text-foreground">Needs Attention</h2>
+            <h2 className="text-sm font-semibold tracking-normal text-foreground">Needs Attention</h2>
           </div>
           <div className="space-y-2.5">
             {totals.urgent.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-[var(--hh-urgent-border)] bg-card p-4">
+              <div key={item.id} className="rounded-[1.35rem] border border-[var(--hh-urgent-border)] bg-card/90 p-4">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-urgent-bg)]"><Wrench className="h-4 w-4 text-[var(--hh-urgent)]" /></div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black leading-tight text-foreground">{item.title}</p>
+                    <p className="text-sm font-semibold leading-tight text-foreground">{item.title}</p>
                     <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, item.propertyId)} - {item.unit} - {item.tenantName}</p>
                     <p className="mt-2 rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">Next action: {maintenanceNextAction(item)}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -274,21 +274,21 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
                       <Chip className={priorityStyle(item.priority)}>High</Chip>
                     </div>
                   </div>
-                  <button onClick={() => onNav("properties")} className="mt-0.5 flex-shrink-0 text-xs font-black text-[var(--hh-primary)] hover:opacity-60">View</button>
+                  <button onClick={() => onNav("properties")} className="mt-0.5 flex-shrink-0 text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60">View</button>
                 </div>
               </div>
             ))}
             {totals.expiring.map((tenant) => (
-              <div key={tenant.id} className="rounded-2xl border border-[var(--hh-warning-border)] bg-card p-4">
+              <div key={tenant.id} className="rounded-[1.35rem] border border-[var(--hh-warning-border)] bg-card/90 p-4">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-warning-bg)]"><Calendar className="h-4 w-4 text-[var(--hh-warning)]" /></div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black leading-tight text-foreground">Lease expiring - {tenant.name}</p>
+                    <p className="text-sm font-semibold leading-tight text-foreground">Lease expiring - {tenant.name}</p>
                     <p className="mt-0.5 text-xs leading-tight text-muted-foreground">{propertyName(data, tenant.propertyId)} - {tenant.unit} - ends {tenant.leaseEnd}</p>
                     <p className="mt-2 rounded-xl bg-background px-3 py-2 text-xs font-bold leading-5 text-muted-foreground">Next action: {leaseNextAction(tenant)}</p>
                     <div className="mt-2"><StatusBadge status={tenant.status} /></div>
                   </div>
-                  <button onClick={() => onNav("tasks")} className="mt-0.5 flex-shrink-0 text-xs font-black text-[var(--hh-primary)] hover:opacity-60">Renew</button>
+                  <button onClick={() => onNav("tasks")} className="mt-0.5 flex-shrink-0 text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60">Renew</button>
                 </div>
               </div>
             ))}
@@ -298,8 +298,8 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
 
       <section className="mb-6 px-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2"><ClipboardList className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-black tracking-tight text-foreground">Overdue & Due Soon</h2></div>
-          <button onClick={() => onNav("tasks")} className="text-xs font-black text-[var(--hh-primary)] hover:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">See all</button>
+          <div className="flex items-center gap-2"><ClipboardList className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-semibold tracking-normal text-foreground">Overdue & Due Soon</h2></div>
+          <button onClick={() => onNav("tasks")} className="text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60 focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">See all</button>
         </div>
         <div className="space-y-2">
           {[...totals.overdueTasks, ...totals.dueSoonTasks.filter((task) => !totals.overdueTasks.some((overdue) => overdue.id === task.id))].slice(0, 6).map((task) => (
@@ -313,18 +313,18 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
       <section className="grid gap-6 px-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div>
           <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-[var(--hh-primary)]" /><h2 className="text-sm font-black tracking-tight text-foreground">Property Status</h2></div>
-            <button onClick={() => onNav("properties")} className="text-xs font-black text-[var(--hh-primary)] hover:opacity-60">Open properties</button>
+            <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-[var(--hh-primary)]" /><h2 className="text-sm font-semibold tracking-normal text-foreground">Property Status</h2></div>
+            <button onClick={() => onNav("properties")} className="text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60">Open properties</button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {data.properties.slice(0, 4).map((property) => {
               const stats = propertyStats(data, property.id);
               const openIssues = data.maintenance.filter((item) => item.propertyId === property.id && item.status !== "resolved").length;
               return (
-                <button key={property.id} onClick={() => onOpenProperty(property.id)} className="rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-[var(--hh-primary)]/25 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">
+                <button key={property.id} onClick={() => onOpenProperty(property.id)} className="rounded-[1.35rem] border border-border bg-card/90 p-4 text-left transition-all hover:border-[var(--hh-primary)]/25 hover:shadow-[var(--hh-shadow-sm)] focus-visible:ring-2 focus-visible:ring-[var(--hh-primary)]/30">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-foreground">{property.name}</p>
+                      <p className="truncate text-sm font-semibold text-foreground">{property.name}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{stats.occupiedUnits}/{property.units} occupied</p>
                     </div>
                     <Chip className={openIssues > 0 ? "border-[var(--hh-urgent-border)] bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]" : "border-[var(--hh-success-border)] bg-[var(--hh-success-bg)] text-[var(--hh-success)]"}>{openIssues > 0 ? `${openIssues} open` : "Clear"}</Chip>
@@ -339,17 +339,17 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
           </div>
         </div>
         <div>
-          <div className="mb-3 flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-black tracking-tight text-foreground">Action Receipts</h2></div>
+          <div className="mb-3 flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[var(--hh-success)]" /><h2 className="text-sm font-semibold tracking-normal text-foreground">Action Receipts</h2></div>
           <div className="space-y-2">
             {activity.map((item) => (
-              <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
+              <div key={item.id} className="flex items-start gap-3 rounded-[1.35rem] border border-border bg-card/90 p-4">
                 <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${item.tone === "urgent" ? "bg-[var(--hh-urgent-bg)] text-[var(--hh-urgent)]" : item.tone === "warning" ? "bg-[var(--hh-warning-bg)] text-[var(--hh-warning)]" : item.tone === "success" ? "bg-[var(--hh-success-bg)] text-[var(--hh-success)]" : "bg-muted text-muted-foreground"}`}>
                   <CheckCircle2 className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="text-sm font-black leading-tight text-foreground">{item.title}</p>
-                    <span className="flex-shrink-0 text-[10px] font-black uppercase tracking-wide text-muted-foreground">{activityTime(item.at)}</span>
+                    <p className="text-sm font-semibold leading-tight text-foreground">{item.title}</p>
+                    <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{activityTime(item.at)}</span>
                   </div>
                   <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{item.detail}</p>
                   <p className="mt-2 rounded-lg bg-background px-2.5 py-1.5 text-xs font-bold leading-5 text-foreground">{item.outcome}</p>
@@ -426,10 +426,10 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
         <img src={property.imageUrl || DEFAULT_IMAGES[0]} alt={property.name} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
       </div>
-      <div className="relative z-10 mx-4 -mt-5 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+      <div className="relative z-10 mx-4 -mt-5 overflow-hidden rounded-[1.35rem] border border-border bg-card/90 shadow-[var(--hh-shadow-md)]">
         <div className="grid grid-cols-3 divide-x divide-border py-4 text-center">
           {[{ value: `${stats.occupiedUnits}/${property.units}`, label: "Occupied" }, { value: stats.tenants.length, label: "Tenants" }, { value: money(stats.revenue), label: "Monthly" }].map((item) => (
-            <div key={item.label}><p className="text-lg font-black tracking-[-0.04em] text-foreground">{item.value}</p><p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{item.label}</p></div>
+            <div key={item.label}><p className="text-lg font-semibold text-foreground">{item.value}</p><p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{item.label}</p></div>
           ))}
         </div>
       </div>
@@ -438,7 +438,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
       <div className="px-4 pb-1 pt-4">
         <div className="flex gap-1 rounded-xl bg-muted/50 p-1">
           {(["overview", "maintenance", "documents"] as const).map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 rounded-lg py-2 text-xs font-black capitalize leading-none transition-all ${activeTab === tab ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground/70"}`}>
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 rounded-lg py-2 text-xs font-semibold capitalize leading-none transition-all ${activeTab === tab ? "bg-card text-foreground shadow-[var(--hh-shadow-sm)]" : "text-muted-foreground hover:text-foreground/70"}`}>
               {tab}{tab === "maintenance" && openIssues > 0 && <span className="ml-1 text-[var(--hh-urgent)]">({openIssues})</span>}
             </button>
           ))}
@@ -449,13 +449,13 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
         {activeTab === "overview" && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Units & Tenants</p>
-              <button onClick={onAddTenant} className="flex items-center gap-1 text-xs font-black text-[var(--hh-primary)]"><Plus className="h-3.5 w-3.5" />Add tenant</button>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Units & Tenants</p>
+              <button onClick={onAddTenant} className="flex items-center gap-1 text-xs font-semibold text-[var(--hh-primary)]"><Plus className="h-3.5 w-3.5" />Add tenant</button>
             </div>
             {stats.tenants.map((tenant) => (
-              <div key={tenant.id} className="rounded-2xl border border-border bg-card p-4">
+              <div key={tenant.id} className="rounded-[1.35rem] border border-border bg-card/90 p-4">
                 <div className="mb-2.5 flex items-start justify-between gap-3">
-                  <div className="min-w-0"><p className="text-sm font-black leading-tight text-foreground">{tenant.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{tenant.unit} - {money(tenant.rent)}/mo</p></div>
+                  <div className="min-w-0"><p className="text-sm font-semibold leading-tight text-foreground">{tenant.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{tenant.unit} - {money(tenant.rent)}/mo</p></div>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     <StatusBadge status={tenant.status} />
                     <IconAction label="Edit tenant" icon={Pencil} onClick={() => onEditTenant(tenant)} />
@@ -465,14 +465,14 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
                 <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground"><Calendar className="h-3.5 w-3.5" /><span>{tenant.leaseStart} - {tenant.leaseEnd}</span></div>
                 {tenant.notes && <p className="mb-3 rounded-xl bg-muted/40 px-3 py-2 text-xs italic leading-relaxed text-muted-foreground">"{tenant.notes}"</p>}
                 <div className="flex items-center gap-3 border-t border-border pt-3">
-                  <a href={`tel:${tenant.phone}`} className="flex items-center gap-1.5 text-xs font-black text-[var(--hh-primary)] hover:opacity-60"><Phone className="h-3.5 w-3.5" />{tenant.phone}</a>
+                  <a href={`tel:${tenant.phone}`} className="flex items-center gap-1.5 text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60"><Phone className="h-3.5 w-3.5" />{tenant.phone}</a>
                   <span className="h-3 w-px bg-border" />
-                  <a href={`mailto:${tenant.email}`} className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-black text-[var(--hh-primary)] hover:opacity-60"><Mail className="h-3.5 w-3.5 flex-shrink-0" /><span className="truncate">{tenant.email}</span></a>
+                  <a href={`mailto:${tenant.email}`} className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-semibold text-[var(--hh-primary)] hover:opacity-60"><Mail className="h-3.5 w-3.5 flex-shrink-0" /><span className="truncate">{tenant.email}</span></a>
                 </div>
               </div>
             ))}
             {vacant > 0 && (
-              <button onClick={onAddTenant} className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-border p-4 text-left transition-colors hover:border-[var(--hh-primary)]/30">
+              <button onClick={onAddTenant} className="flex w-full items-center gap-3 rounded-[1.35rem] border-2 border-dashed border-border p-4 text-left transition-colors hover:border-[var(--hh-primary)]/30">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted"><Plus className="h-4 w-4 text-muted-foreground" /></div>
                 <div><p className="text-sm font-bold text-foreground">{vacant} vacant {vacant === 1 ? "unit" : "units"}</p><p className="text-xs text-muted-foreground">Add tenant details and lease dates</p></div>
               </button>
@@ -482,11 +482,11 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
 
         {activeTab === "maintenance" && (
           <>
-            <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Requests</p><button onClick={onAddMaintenance} className="flex items-center gap-1 text-xs font-black text-[var(--hh-primary)]"><Plus className="h-3.5 w-3.5" />Add</button></div>
+            <div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Requests</p><button onClick={onAddMaintenance} className="flex items-center gap-1 text-xs font-semibold text-[var(--hh-primary)]"><Plus className="h-3.5 w-3.5" />Add</button></div>
             {maintenance.length === 0 ? <EmptyState icon={Wrench} title="No maintenance requests" /> : maintenance.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-border bg-card p-4">
+              <div key={item.id} className="rounded-[1.35rem] border border-border bg-card/90 p-4">
                 <div className="mb-2 flex items-start justify-between gap-2">
-                  <p className="flex-1 text-sm font-black leading-tight text-foreground">{item.title}</p>
+                  <p className="flex-1 text-sm font-semibold leading-tight text-foreground">{item.title}</p>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     <StatusBadge status={item.status} />
                     <IconAction label="Edit maintenance" icon={Pencil} onClick={() => onEditMaintenance(item)} />
@@ -497,7 +497,7 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
                 <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{item.unit} - {item.tenantName}</span><span>{item.date}</span>{item.vendor && <span className="font-bold text-[var(--hh-primary)]">{item.vendor}</span>}</div>
                 <div className="flex items-center justify-between gap-2">
                   <Chip className={priorityStyle(item.priority)}>{item.priority}</Chip>
-                  {item.status !== "resolved" ? <button onClick={() => updateMaintenance(item.id, "resolved")} className="text-xs font-black text-[var(--hh-success)]">Mark resolved</button> : <button onClick={() => updateMaintenance(item.id, "open")} className="text-xs font-black text-[var(--hh-primary)]">Reopen</button>}
+                  {item.status !== "resolved" ? <button onClick={() => updateMaintenance(item.id, "resolved")} className="text-xs font-semibold text-[var(--hh-success)]">Mark resolved</button> : <button onClick={() => updateMaintenance(item.id, "open")} className="text-xs font-semibold text-[var(--hh-primary)]">Reopen</button>}
                 </div>
               </div>
             ))}
@@ -506,9 +506,9 @@ function PropertyDetail({ data, propertyId, onBack, onAddTenant, onAddMaintenanc
 
         {activeTab === "documents" && (
           <>
-            <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Files</p><button onClick={onAddDocument} className="flex items-center gap-1 text-xs font-black text-[var(--hh-primary)]"><Upload className="h-3.5 w-3.5" />Upload</button></div>
+            <div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Files</p><button onClick={onAddDocument} className="flex items-center gap-1 text-xs font-semibold text-[var(--hh-primary)]"><Upload className="h-3.5 w-3.5" />Upload</button></div>
             {docs.length === 0 ? <EmptyState icon={FileText} title="No documents yet" /> : docs.map((doc) => (
-              <div key={doc.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
+              <div key={doc.id} className="flex items-center gap-3 rounded-xl border border-border bg-card/90 p-4">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${docColor(doc.type)}`}><FileText className="h-4 w-4" /></div>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-foreground">{doc.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{doc.date} - {doc.size}{doc.fileName ? ` - ${doc.fileName}` : ""}</p></div>
                 <div className="flex flex-shrink-0 gap-2">
@@ -537,8 +537,8 @@ function Tasks({ data, onAdd, onEdit, onDelete, toggleTask }: { data: AppData; o
     <div className="mx-auto w-full max-w-5xl pb-24 lg:pb-10">
       <PageHeader title="Tasks" subtitle={`${data.tasks.filter((t) => t.status === "pending").length} open - ${overdueCount} overdue - ${highCount} urgent`} action={<AddButton label="Add" onClick={onAdd} />} />
       <div className="px-4 pt-4">
-        <div className="mb-3 rounded-2xl border border-border bg-card p-4">
-          <p className="text-sm font-black text-foreground">Work queue</p>
+        <div className="mb-3 rounded-[1.35rem] border border-border bg-card/90 p-4">
+          <p className="text-sm font-semibold text-foreground">Work queue</p>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">Sorted by due date so renewals, inspections, and follow-ups surface before lower-pressure work.</p>
         </div>
       </div>
@@ -591,16 +591,16 @@ function LegalPage({ kind, onBack }: { kind: "privacy" | "terms"; onBack: () => 
     <div className="pb-24 lg:pb-10">
       <PageHeader title={privacy ? "Privacy Policy" : "Terms of Use"} subtitle="Beta draft for public testing" onBack={onBack} />
       <div className="space-y-3 px-4 pt-4">
-        <div className="rounded-2xl border border-[var(--hh-primary-border)] bg-card p-5">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--hh-success-bg)]">
+        <div className="rounded-[1.35rem] border border-[var(--hh-primary-border)] bg-card/90 p-5">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[1.35rem] bg-[var(--hh-success-bg)]">
             {privacy ? <Shield className="h-5 w-5 text-[var(--hh-success)]" /> : <Scale className="h-5 w-5 text-[var(--hh-success)]" />}
           </div>
-          <p className="text-lg font-black tracking-[-0.03em] text-foreground">{privacy ? "Your rental data stays yours." : "Clear terms for beta use."}</p>
+          <p className="text-lg font-semibold text-foreground">{privacy ? "Your rental data stays yours." : "Clear terms for beta use."}</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Last updated August 8, 2026. This draft should be reviewed by a qualified attorney before a full public launch.</p>
         </div>
         {sections.map((section) => (
-          <section key={section.title} className="rounded-2xl border border-border bg-card p-4">
-            <h2 className="text-sm font-black tracking-[-0.015em] text-foreground">{section.title}</h2>
+          <section key={section.title} className="rounded-[1.35rem] border border-border bg-card/90 p-4">
+            <h2 className="text-sm font-semibold text-foreground">{section.title}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{section.body}</p>
           </section>
         ))}
@@ -636,9 +636,9 @@ function FeedbackScreen({ profile, userId, currentPage, onBack, onTrack }: { pro
     <div className="pb-24 lg:pb-10">
       <PageHeader title="Feedback" subtitle="Help shape the beta" onBack={onBack} />
       <div className="px-4 pt-4">
-        <form onSubmit={submit} className="rounded-2xl border border-border bg-card p-5">
-          <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--hh-success-bg)]"><MessageSquare className="h-5 w-5 text-[var(--hh-success)]" /></div>
-          <p className="text-lg font-black tracking-[-0.03em] text-foreground">Tell us what happened.</p>
+        <form onSubmit={submit} className="rounded-[1.35rem] border border-border bg-card/90 p-5">
+          <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-[1.35rem] bg-[var(--hh-success-bg)]"><MessageSquare className="h-5 w-5 text-[var(--hh-success)]" /></div>
+          <p className="text-lg font-semibold text-foreground">Tell us what happened.</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Bug reports, feature ideas, confusing screens, and beta notes all land in your Supabase feedback table.</p>
           <div className="mt-5 space-y-3">
             <Field label="Type">
@@ -697,27 +697,27 @@ function AnalyticsScreen({ userId, analyticsEnabled, setAnalyticsEnabled, onBack
     <div className="pb-24 lg:pb-10">
       <PageHeader title="Analytics" subtitle="First-party beta signals" onBack={onBack} />
       <div className="space-y-3 px-4 pt-4">
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--hh-success-bg)]"><BarChart3 className="h-5 w-5 text-[var(--hh-success)]" /></div>
-          <p className="text-lg font-black tracking-[-0.03em] text-foreground">Privacy-friendly product analytics.</p>
+        <div className="rounded-[1.35rem] border border-border bg-card/90 p-5">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[1.35rem] bg-[var(--hh-success-bg)]"><BarChart3 className="h-5 w-5 text-[var(--hh-success)]" /></div>
+          <p className="text-lg font-semibold text-foreground">Privacy-friendly product analytics.</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Home Harbor records simple events like page opens, creates, updates, deletes, and feedback submissions to your own Supabase project.</p>
           <Button onClick={toggleAnalytics} variant={analyticsEnabled ? "primary" : "secondary"} className="mt-4 w-full">
             Analytics {analyticsEnabled ? "on" : "off"}
           </Button>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="text-sm font-black text-foreground">Recent activity</p>
+        <div className="rounded-[1.35rem] border border-border bg-card/90 p-4">
+          <p className="text-sm font-semibold text-foreground">Recent activity</p>
           {status && <p className="mt-2 text-sm leading-6 text-muted-foreground">{status}</p>}
           {summary && (
             <div className="mt-3 space-y-2">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl bg-background p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Events</p><p className="mt-1 text-xl font-black text-foreground">{summary.totalEvents}</p></div>
-                <div className="rounded-xl bg-background p-3"><p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Last event</p><p className="mt-1 truncate text-xs font-bold text-foreground">{summary.lastEventAt ? new Date(summary.lastEventAt).toLocaleString() : "None yet"}</p></div>
+                <div className="rounded-xl bg-background p-3"><p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Events</p><p className="mt-1 text-xl font-semibold text-foreground">{summary.totalEvents}</p></div>
+                <div className="rounded-xl bg-background p-3"><p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Last event</p><p className="mt-1 truncate text-xs font-bold text-foreground">{summary.lastEventAt ? new Date(summary.lastEventAt).toLocaleString() : "None yet"}</p></div>
               </div>
               {summary.topEvents.length === 0 ? <EmptyState icon={BarChart3} title="No analytics yet" subtitle="Events appear as testers use the app." /> : summary.topEvents.map((event) => (
                 <div key={event.name} className="flex items-center justify-between rounded-xl bg-background px-3 py-2">
                   <span className="text-xs font-bold text-foreground">{event.name.replace(/_/g, " ")}</span>
-                  <span className="text-xs font-black text-muted-foreground">{event.count}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">{event.count}</span>
                 </div>
               ))}
             </div>
@@ -746,14 +746,14 @@ function SettingsScreen({ data, profile, userId, activeTab, notificationsEnabled
     <div className="pb-24 lg:pb-10">
       <PageHeader title="Settings" />
       <div className="px-4 pt-4">
-        <div className="mb-6 flex items-center gap-4 rounded-2xl border border-border bg-card p-5">
-          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-[var(--hh-primary)] text-lg font-black uppercase text-white">{initials(profile.name)}</div>
-          <div className="min-w-0 flex-1"><p className="font-black tracking-[-0.02em] text-foreground">{profile.name}</p><p className="text-sm text-muted-foreground">{profile.email}</p><p className="mt-1 text-xs text-muted-foreground">{data.properties.length} properties - {data.tenants.length} tenants</p></div>
+        <div className="mb-6 flex items-center gap-4 rounded-[1.35rem] border border-border bg-card/90 p-5">
+          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[1.35rem] bg-[var(--hh-primary)] text-lg font-semibold uppercase text-white">{initials(profile.name)}</div>
+          <div className="min-w-0 flex-1"><p className="font-semibold text-foreground">{profile.name}</p><p className="text-sm text-muted-foreground">{profile.email}</p><p className="mt-1 text-xs text-muted-foreground">{data.properties.length} properties - {data.tenants.length} tenants</p></div>
         </div>
         {items.map((section) => (
           <div key={section.section} className="mb-5">
-            <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-muted-foreground">{section.section}</p>
-            <div className="overflow-hidden rounded-2xl border border-border bg-card divide-y divide-border">
+            <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{section.section}</p>
+            <div className="overflow-hidden rounded-[1.35rem] border border-border bg-card/90 divide-y divide-border">
               {section.rows.map(({ Icon, label, value, action, view }) => (
                 <button key={label} onClick={() => view ? setView(view) : action?.()} className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/30">
                   <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
@@ -769,15 +769,15 @@ function SettingsScreen({ data, profile, userId, activeTab, notificationsEnabled
           <Button variant="secondary" onClick={exportData} className="text-xs"><Download className="h-4 w-4" />Export</Button>
           <Button variant="danger" onClick={resetData} className="text-xs"><RefreshCcw className="h-4 w-4" />Reset demo</Button>
         </div>
-        <button onClick={onToggleNotifications} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-muted-foreground">
+        <button onClick={onToggleNotifications} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card/90 px-4 py-3 text-xs font-semibold text-muted-foreground shadow-[var(--hh-shadow-sm)] transition-all hover:bg-white active:scale-[0.99]">
           <Bell className="h-4 w-4" />
           Browser notifications {notificationsEnabled ? "on" : "off"}
         </button>
-        <button onClick={replayOnboarding} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-muted-foreground">
+        <button onClick={replayOnboarding} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card/90 px-4 py-3 text-xs font-semibold text-muted-foreground shadow-[var(--hh-shadow-sm)] transition-all hover:bg-white active:scale-[0.99]">
           <User className="h-4 w-4" />
           Replay onboarding
         </button>
-        <button onClick={onSignOut} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-xs font-black text-muted-foreground">
+        <button onClick={onSignOut} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card/90 px-4 py-3 text-xs font-semibold text-muted-foreground shadow-[var(--hh-shadow-sm)] transition-all hover:bg-white active:scale-[0.99]">
           <Lock className="h-4 w-4" />
           Sign out
         </button>
@@ -788,10 +788,10 @@ function SettingsScreen({ data, profile, userId, activeTab, notificationsEnabled
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block"><span className="mb-1.5 block text-xs font-black uppercase tracking-wider text-muted-foreground">{label}</span>{children}</label>;
+  return <label className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>{children}</label>;
 }
 
-const inputClass = "w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-[var(--hh-primary)]/40 focus:ring-2 focus:ring-[var(--hh-primary)]/20";
+const inputClass = "w-full rounded-2xl border border-border bg-[var(--input-background)] px-3.5 py-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-[var(--hh-primary-border)] focus:bg-card focus:ring-2 focus:ring-[var(--hh-primary-soft)]";
 
 function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, onSave }: { kind: ModalKind; data: AppData; selectedProperty: string | null; editRecord: EditableRecord; saving: boolean; onClose: () => void; onSave: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editRecord: EditableRecord) => Promise<void> }) {
   if (!kind) return null;
@@ -807,10 +807,10 @@ function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-0 sm:items-center sm:justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <form onSubmit={submit} className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border border-border bg-card p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl sm:max-w-lg sm:rounded-2xl sm:pb-4">
+      <form onSubmit={submit} className="max-h-[92dvh] w-full overflow-y-auto rounded-t-[1.75rem] border border-border bg-card/95 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-[var(--hh-shadow-md)] backdrop-blur-2xl sm:max-w-lg sm:rounded-[1.35rem] sm:pb-4">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <div><p className="text-lg font-black tracking-[-0.03em] text-foreground">{title}</p><p className="text-xs text-muted-foreground">Saved to your cloud portfolio automatically.</p></div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-muted" aria-label="Close"><X className="h-4 w-4" /></button>
+          <div><p className="text-lg font-semibold text-foreground">{title}</p><p className="text-xs text-muted-foreground">Saved to your cloud portfolio automatically.</p></div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 transition-colors hover:bg-muted active:scale-95" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
 
         <div className="space-y-3">
@@ -890,9 +890,9 @@ function AuthShell({ children, eyebrow, title, subtitle }: { children: React.Rea
         <div>
           <div className="mb-10 flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Home className="h-5 w-5" /></div>
-            <span className="text-lg font-black tracking-[-0.03em]">Home Harbor</span>
+            <span className="text-lg font-semibold">Home Harbor</span>
           </div>
-          <h1 className="max-w-md text-4xl font-black leading-tight tracking-[-0.05em]">Your rental data, tied to your account.</h1>
+          <h1 className="max-w-md text-4xl font-semibold leading-tight">Your rental data, tied to your account.</h1>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/68">Sign in on your Mac, iPhone, or iPad and keep the same portfolio synced through Supabase.</p>
         </div>
         <div className="grid gap-3">
@@ -901,9 +901,9 @@ function AuthShell({ children, eyebrow, title, subtitle }: { children: React.Rea
             { label: "Database", value: "Cloud synced" },
             { label: "Security", value: "Row-level policies" },
           ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+            <div key={item.label} className="flex items-center justify-between rounded-[1.35rem] border border-white/10 bg-white/10 px-4 py-3">
               <span className="text-sm font-bold text-white/75">{item.label}</span>
-              <span className="text-sm font-black">{item.value}</span>
+              <span className="text-sm font-semibold">{item.value}</span>
             </div>
           ))}
         </div>
@@ -913,11 +913,11 @@ function AuthShell({ children, eyebrow, title, subtitle }: { children: React.Rea
         <div className="w-full max-w-[440px]">
           <div className="mb-6 flex items-center gap-2 lg:hidden">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--hh-primary)] text-white"><Home className="h-4 w-4" /></div>
-            <span className="font-black tracking-[-0.03em] text-foreground">Home Harbor</span>
+            <span className="font-semibold text-foreground">Home Harbor</span>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
-            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{eyebrow}</p>
-            <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">{title}</h2>
+          <div className="rounded-[1.35rem] border border-border bg-card/90 p-5 shadow-[var(--hh-shadow-sm)] sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{eyebrow}</p>
+            <h2 className="mt-2 text-2xl font-semibold leading-tight text-foreground">{title}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{subtitle}</p>
             {children}
           </div>
@@ -936,13 +936,13 @@ function CloudSetupScreen() {
     >
       <div className="mt-6 space-y-3">
         <div className="rounded-xl border border-border bg-background p-4">
-          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">1. Environment</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">1. Environment</p>
           <pre className="mt-2 overflow-x-auto rounded-lg bg-[var(--hh-code-bg)] p-3 text-xs leading-5 text-white">{`VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-public-anon-key`}</pre>
         </div>
         <div className="rounded-xl border border-border bg-background p-4">
-          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">2. Database</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Run <span className="font-black text-foreground">supabase/schema.sql</span> in the Supabase SQL editor to create the secured portfolio table.</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">2. Database</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Run <span className="font-semibold text-foreground">supabase/schema.sql</span> in the Supabase SQL editor to create the secured portfolio table.</p>
         </div>
       </div>
     </AuthShell>
@@ -968,13 +968,13 @@ function InstallHint() {
   }
 
   return (
-    <div className="mx-4 mt-3 rounded-2xl border border-[var(--hh-primary-border)] bg-card p-4 shadow-sm">
+    <div className="mx-4 mt-3 rounded-[1.35rem] border border-[var(--hh-primary-border)] bg-card/90 p-4 shadow-[var(--hh-shadow-sm)]">
       <div className="flex items-start gap-3">
         <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[var(--hh-success-bg)]">
           <Upload className="h-4 w-4 text-[var(--hh-success)]" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-foreground">Install on your iPhone</p>
+          <p className="text-sm font-semibold text-foreground">Install on your iPhone</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">In Safari, tap Share, then Add to Home Screen for an app-like Home Harbor icon.</p>
         </div>
         <button onClick={dismiss} className="-mr-1 -mt-1 rounded-lg p-1.5 text-muted-foreground hover:bg-muted" aria-label="Dismiss install hint">
@@ -1025,7 +1025,7 @@ function AuthScreen() {
           {busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
         </Button>
       </form>
-      <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="mt-4 w-full text-center text-xs font-black text-[var(--hh-primary)]">
+      <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="mt-4 w-full text-center text-xs font-semibold text-[var(--hh-primary)]">
         {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
       </button>
     </AuthShell>
@@ -1073,9 +1073,9 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
         <div>
           <div className="mb-10 flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15"><Home className="h-5 w-5" /></div>
-            <span className="text-lg font-black tracking-[-0.03em]">Home Harbor</span>
+            <span className="text-lg font-semibold">Home Harbor</span>
           </div>
-          <h1 className="max-w-md text-4xl font-black leading-tight tracking-[-0.05em]">Bring your rentals into focus before the day starts.</h1>
+          <h1 className="max-w-md text-4xl font-semibold leading-tight">Bring your rentals into focus before the day starts.</h1>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/68">Set up the essentials once, then manage properties, tenants, tasks, maintenance, and documents from one calm workspace.</p>
         </div>
         <div className="grid gap-3">
@@ -1084,9 +1084,9 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
             { label: "Maintenance", value: "Priority tracking" },
             { label: "Documents", value: "Property organized" },
           ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+            <div key={item.label} className="flex items-center justify-between rounded-[1.35rem] border border-white/10 bg-white/10 px-4 py-3">
               <span className="text-sm font-bold text-white/78">{item.label}</span>
-              <span className="text-sm font-black">{item.value}</span>
+              <span className="text-sm font-semibold">{item.value}</span>
             </div>
           ))}
         </div>
@@ -1097,7 +1097,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2 lg:hidden">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--hh-primary)] text-white"><Home className="h-4 w-4" /></div>
-              <span className="font-black tracking-[-0.03em] text-foreground">Home Harbor</span>
+              <span className="font-semibold text-foreground">Home Harbor</span>
             </div>
             <div className="ml-auto flex gap-1.5">
               {steps.map((label, index) => (
@@ -1106,12 +1106,12 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
+          <div className="rounded-[1.35rem] border border-border bg-card/90 p-5 shadow-[var(--hh-shadow-sm)] sm:p-6">
             {step === 0 && (
               <div>
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--hh-success-bg)]"><Building2 className="h-6 w-6 text-[var(--hh-success)]" /></div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Welcome</p>
-                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">Let’s set up your rental command center.</h2>
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-[1.35rem] bg-[var(--hh-success-bg)]"><Building2 className="h-6 w-6 text-[var(--hh-success)]" /></div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Welcome</p>
+                <h2 className="mt-2 text-2xl font-semibold leading-tight text-foreground">Let’s set up your rental command center.</h2>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">Home Harbor works best when it starts with your name, your portfolio, and at least one property. You can use sample data first or begin with your own clean workspace.</p>
                 <div className="mt-6 grid gap-2">
                   {[
@@ -1121,7 +1121,7 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
                   ].map(({ Icon, title, copy }) => (
                     <div key={title} className="flex gap-3 rounded-xl bg-background p-3">
                       <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--hh-primary)]" />
-                      <div><p className="text-sm font-black text-foreground">{title}</p><p className="text-xs leading-5 text-muted-foreground">{copy}</p></div>
+                      <div><p className="text-sm font-semibold text-foreground">{title}</p><p className="text-xs leading-5 text-muted-foreground">{copy}</p></div>
                     </div>
                   ))}
                 </div>
@@ -1130,8 +1130,8 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
 
             {step === 1 && (
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Your profile</p>
-                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">First, tell Home Harbor who is managing the portfolio.</h2>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Your profile</p>
+                <h2 className="mt-2 text-2xl font-semibold leading-tight text-foreground">First, tell Home Harbor who is managing the portfolio.</h2>
                 <div className="mt-6 space-y-3">
                   <Field label="Full name"><input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} className={inputClass} placeholder="Your name" /></Field>
                   <Field label="Email"><input value={profile.email} onChange={(event) => setProfile({ ...profile, email: event.target.value })} type="email" className={inputClass} placeholder="you@email.com" /></Field>
@@ -1142,17 +1142,17 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
 
             {step === 2 && (
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Portfolio start</p>
-                <h2 className="mt-2 text-2xl font-black leading-tight tracking-[-0.04em] text-foreground">Choose how you want to begin.</h2>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Portfolio start</p>
+                <h2 className="mt-2 text-2xl font-semibold leading-tight text-foreground">Choose how you want to begin.</h2>
                 <div className="mt-6 grid gap-2 sm:grid-cols-2">
-                  <button type="button" onClick={() => setMode("sample")} className={`rounded-2xl border p-4 text-left transition-all ${mode === "sample" ? "border-[var(--hh-primary)] bg-[var(--hh-primary-soft)] ring-2 ring-[var(--hh-primary-border)]" : "border-border bg-background"}`}>
+                  <button type="button" onClick={() => setMode("sample")} className={`rounded-[1.35rem] border p-4 text-left transition-all ${mode === "sample" ? "border-[var(--hh-primary)] bg-[var(--hh-primary-soft)] ring-2 ring-[var(--hh-primary-border)]" : "border-border bg-background"}`}>
                     <CheckCircle2 className={`mb-3 h-5 w-5 ${mode === "sample" ? "text-[var(--hh-success)]" : "text-muted-foreground"}`} />
-                    <p className="text-sm font-black text-foreground">Use sample portfolio</p>
+                    <p className="text-sm font-semibold text-foreground">Use sample portfolio</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">Best for exploring the app with realistic data.</p>
                   </button>
-                  <button type="button" onClick={() => setMode("fresh")} className={`rounded-2xl border p-4 text-left transition-all ${mode === "fresh" ? "border-[var(--hh-primary)] bg-[var(--hh-primary-soft)] ring-2 ring-[var(--hh-primary-border)]" : "border-border bg-background"}`}>
+                  <button type="button" onClick={() => setMode("fresh")} className={`rounded-[1.35rem] border p-4 text-left transition-all ${mode === "fresh" ? "border-[var(--hh-primary)] bg-[var(--hh-primary-soft)] ring-2 ring-[var(--hh-primary-border)]" : "border-border bg-background"}`}>
                     <Plus className={`mb-3 h-5 w-5 ${mode === "fresh" ? "text-[var(--hh-primary)]" : "text-muted-foreground"}`} />
-                    <p className="text-sm font-black text-foreground">Start with my property</p>
+                    <p className="text-sm font-semibold text-foreground">Start with my property</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">Create a clean workspace with one property.</p>
                   </button>
                 </div>
@@ -1171,12 +1171,12 @@ function OnboardingFlow({ onComplete }: { onComplete: (setup: OnboardingSetup) =
             )}
 
             <div className="mt-7 flex items-center gap-2">
-              {step > 0 && <button type="button" onClick={() => setStep(step - 1)} className="rounded-xl border border-border bg-card px-4 py-3 text-sm font-black text-muted-foreground">Back</button>}
+              {step > 0 && <button type="button" onClick={() => setStep(step - 1)} className="rounded-xl border border-border bg-card/90 px-4 py-3 text-sm font-semibold text-muted-foreground">Back</button>}
               <button
                 type="button"
                 disabled={!canContinue}
                 onClick={() => step === 2 ? finish() : setStep(step + 1)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--hh-primary)] px-4 py-3 text-sm font-black text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--hh-primary)] px-4 py-3 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {step === 2 ? "Enter Home Harbor" : "Continue"}
                 <ChevronRight className="h-4 w-4" />
@@ -1642,9 +1642,9 @@ export default function App() {
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+        <div className="rounded-[1.35rem] border border-border bg-card/90 p-6 text-center shadow-[var(--hh-shadow-sm)]">
           <Home className="mx-auto mb-3 h-8 w-8 text-[var(--hh-primary)]" />
-          <p className="text-sm font-black text-foreground">Loading Home Harbor...</p>
+          <p className="text-sm font-semibold text-foreground">Loading Home Harbor...</p>
           <p className="mt-1 text-xs text-muted-foreground">Checking your account session.</p>
         </div>
       </div>
@@ -1658,9 +1658,9 @@ export default function App() {
   if (cloudLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+        <div className="w-full max-w-md rounded-[1.35rem] border border-border bg-card/90 p-6 text-center shadow-[var(--hh-shadow-sm)]">
           <Shield className="mx-auto mb-3 h-8 w-8 text-[var(--hh-success)]" />
-          <p className="text-sm font-black text-foreground">Loading your portfolio...</p>
+          <p className="text-sm font-semibold text-foreground">Loading your portfolio...</p>
           <p className="mt-1 text-xs text-muted-foreground">{cloudStatus}</p>
           <SkeletonLoader rows={2} />
         </div>
