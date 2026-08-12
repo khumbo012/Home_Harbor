@@ -59,12 +59,16 @@ import { DEFAULT_IMAGES, DEFAULT_PROFILE, INITIAL_DATA } from "./data";
 import {
   loadAnalyticsSummary,
   loadCloudPortfolio,
+  loadTenantRequests,
   openDocumentFile,
   recordAnalyticsEvent,
   saveCloudPortfolio,
   submitFeedback,
+  submitTenantRequest,
   supabase,
   uploadDocumentFile,
+  uploadTenantRequestFile,
+  updateTenantRequestStatus,
 } from "./services";
 import type {
   AnalyticsSummary,
@@ -80,6 +84,7 @@ import type {
   ReminderItem,
   Tab,
   TaskItem,
+  TenantRequest,
   Tenant,
 } from "./types";
 import {
@@ -185,6 +190,7 @@ type DashboardAction = {
   icon: typeof Wrench;
   tab: Tab;
   propertyId?: string;
+  requestId?: string;
 };
 
 function taskActionLabel(task: TaskItem) {
@@ -195,7 +201,32 @@ function taskActionLabel(task: TaskItem) {
   return "Open task";
 }
 
-function buildDashboardActions(data: AppData): DashboardAction[] {
+function tenantRequestNextAction(request: TenantRequest) {
+  if (request.status === "resolved") return "Resolved. Keep the request for your records.";
+  if (request.status === "in-progress") return "In progress. Follow up with the tenant when the work is complete.";
+  return request.permissionToEnter ? "Assign a vendor or schedule the repair." : "Contact the tenant before sending someone.";
+}
+
+function buildDashboardActions(data: AppData, tenantRequests: TenantRequest[] = []): DashboardAction[] {
+  const tenantRequestActions = tenantRequests
+    .filter((request) => request.status !== "resolved")
+    .map((request) => ({
+      id: `tenant-request-${request.id}`,
+      kind: "maintenance" as const,
+      title: request.status === "in-progress" ? `Check tenant request: ${request.title}` : `Review tenant request: ${request.title}`,
+      meta: `${request.propertyName || propertyName(data, request.propertyId)}${request.unit ? ` - ${request.unit}` : ""}${request.tenantName ? ` - ${request.tenantName}` : ""}`,
+      detail: tenantRequestNextAction(request),
+      reason: request.urgency === "high" ? "Tenant marked urgent" : request.status === "open" ? "Tenant waiting" : "In progress",
+      status: request.urgency === "high" ? "Urgent" : request.status === "open" ? "Owner action" : "In progress",
+      cta: request.status === "open" ? "Review request" : "Check status",
+      score: (request.urgency === "high" ? 105 : request.urgency === "medium" ? 70 : 38) + (request.status === "open" ? 18 : 0),
+      tone: request.urgency === "high" ? "urgent" as const : "warning" as const,
+      icon: Wrench,
+      tab: "properties" as const,
+      propertyId: request.propertyId,
+      requestId: request.id,
+    }));
+
   const maintenanceActions = data.maintenance
     .filter((item) => item.status !== "resolved")
     .map((item) => ({
@@ -256,10 +287,10 @@ function buildDashboardActions(data: AppData): DashboardAction[] {
       };
     });
 
-  return [...maintenanceActions, ...leaseActions, ...taskActions].sort((a, b) => b.score - a.score);
+  return [...tenantRequestActions, ...maintenanceActions, ...leaseActions, ...taskActions].sort((a, b) => b.score - a.score);
 }
 
-function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onToggleNotifications, onAddTask, onAddMaintenance, onAddDocument, onOpenProperty }: { data: AppData; profile: AppProfile; reminders: ReminderItem[]; notificationsEnabled: boolean; onNav: (tab: Tab) => void; onToggleNotifications: () => void; onAddTask: () => void; onAddMaintenance: () => void; onAddDocument: () => void; onOpenProperty: (id: string) => void }) {
+function Dashboard({ data, profile, reminders, tenantRequests, notificationsEnabled, onNav, onToggleNotifications, onAddTask, onAddMaintenance, onAddDocument, onOpenProperty, onOpenTenantRequest }: { data: AppData; profile: AppProfile; reminders: ReminderItem[]; tenantRequests: TenantRequest[]; notificationsEnabled: boolean; onNav: (tab: Tab) => void; onToggleNotifications: () => void; onAddTask: () => void; onAddMaintenance: () => void; onAddDocument: () => void; onOpenProperty: (id: string) => void; onOpenTenantRequest: (request: TenantRequest) => void }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const totals = useMemo(() => {
     const units = data.properties.reduce((sum, p) => sum + p.units, 0);
@@ -281,7 +312,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
     return { units, revenue, openMaintenance, urgent, expiring, pendingTasks, overdueTasks, dueSoonTasks };
   }, [data]);
   const vacant = Math.max(totals.units - data.tenants.length, 0);
-  const actions = useMemo(() => buildDashboardActions(data), [data]);
+  const actions = useMemo(() => buildDashboardActions(data, tenantRequests), [data, tenantRequests]);
   const priority = actions[0] || null;
   const ownerActions = actions.slice(0, 5);
   const upcoming = actions.filter((action) => action.tone !== "urgent").slice(0, 4);
@@ -304,6 +335,11 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
   };
   const openPriority = () => {
     if (!priority) return;
+    if (priority.requestId) {
+      const request = tenantRequests.find((item) => item.id === priority.requestId);
+      if (request) onOpenTenantRequest(request);
+      return;
+    }
     if (priority.propertyId && priority.tab === "properties") onOpenProperty(priority.propertyId);
     else onNav(priority.tab);
   };
@@ -368,7 +404,14 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
               tone={action.tone}
               status={action.status}
               actionLabel={action.cta}
-              onClick={() => action.propertyId && action.tab === "properties" ? onOpenProperty(action.propertyId) : onNav(action.tab)}
+              onClick={() => {
+                if (action.requestId) {
+                  const request = tenantRequests.find((item) => item.id === action.requestId);
+                  if (request) onOpenTenantRequest(request);
+                  return;
+                }
+                action.propertyId && action.tab === "properties" ? onOpenProperty(action.propertyId) : onNav(action.tab);
+              }}
             />
           ))}
         </div>
@@ -385,7 +428,14 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
               title={action.title}
               meta={action.meta}
               timing={action.reason}
-              onClick={() => action.propertyId && action.tab === "properties" ? onOpenProperty(action.propertyId) : onNav(action.tab)}
+              onClick={() => {
+                if (action.requestId) {
+                  const request = tenantRequests.find((item) => item.id === action.requestId);
+                  if (request) onOpenTenantRequest(request);
+                  return;
+                }
+                action.propertyId && action.tab === "properties" ? onOpenProperty(action.propertyId) : onNav(action.tab);
+              }}
             />
           ))}
         </div>
@@ -425,7 +475,7 @@ function Dashboard({ data, profile, reminders, notificationsEnabled, onNav, onTo
   );
 }
 
-function PropertiesList({ data, onSelect, onAdd, onEdit, onDelete }: { data: AppData; onSelect: (id: string) => void; onAdd: () => void; onEdit: (property: Property) => void; onDelete: (id: string) => void }) {
+function PropertiesList({ data, onSelect, onAdd, onEdit, onDelete, onCopyRequestLink }: { data: AppData; onSelect: (id: string) => void; onAdd: () => void; onEdit: (property: Property) => void; onDelete: (id: string) => void; onCopyRequestLink: (property: Property) => void }) {
   const [query, setQuery] = useState("");
   const filtered = data.properties.filter((p) => `${p.name} ${p.address} ${p.city}`.toLowerCase().includes(query.toLowerCase()));
 
@@ -434,7 +484,15 @@ function PropertiesList({ data, onSelect, onAdd, onEdit, onDelete }: { data: App
       <PageHeader title="Properties" subtitle={`${data.properties.length} active properties`} action={<AddButton label="Add" onClick={onAdd} />} />
       <SearchAndFilterBar query={query} onQueryChange={setQuery} placeholder="Search by name or address..." />
       <div className="space-y-4 px-4">
-        {filtered.map((property) => <PropertyCard key={property.id} property={property} data={data} onSelect={onSelect} onEdit={onEdit} onDelete={onDelete} />)}
+        {filtered.map((property) => (
+          <div key={property.id} className="space-y-2">
+            <PropertyCard property={property} data={data} onSelect={onSelect} onEdit={onEdit} onDelete={onDelete} />
+            <button onClick={() => onCopyRequestLink(property)} className="flex w-full items-center justify-between rounded-2xl border border-border bg-card/55 px-4 py-3 text-left text-xs font-semibold text-muted-foreground transition-all hover:bg-white active:scale-[0.99]">
+              <span>Tenant request link</span>
+              <span className="text-[var(--hh-primary)]">Copy</span>
+            </button>
+          </div>
+        ))}
         {filtered.length === 0 && <EmptyState icon={Building2} title="No properties found" subtitle="Try a different search or add a new property." />}
       </div>
     </div>
@@ -854,6 +912,119 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputClass = "w-full rounded-2xl border border-border bg-[var(--input-background)] px-3.5 py-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-[var(--hh-primary-border)] focus:bg-card focus:ring-2 focus:ring-[var(--hh-primary-soft)]";
 
+function getTenantRequestRoute() {
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  if (parts[0] !== "request" || !parts[1] || !parts[2]) return null;
+  return {
+    ownerId: decodeURIComponent(parts[1]),
+    propertyId: decodeURIComponent(parts[2]),
+    propertyName: parts[3] ? decodeURIComponent(parts.slice(3).join(" ")) : "",
+  };
+}
+
+function tenantRequestLink(ownerId: string, property: Property) {
+  const base = window.location.origin;
+  return `${base}/request/${encodeURIComponent(ownerId)}/${encodeURIComponent(property.id)}/${encodeURIComponent(property.name)}`;
+}
+
+function TenantRequestScreen({ route }: { route: { ownerId: string; propertyId: string; propertyName?: string } }) {
+  const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const form = new FormData(event.currentTarget);
+      const requestId = uid("tr");
+      const file = form.get("file") instanceof File && (form.get("file") as File).size > 0 ? form.get("file") as File : null;
+      let filePatch: Pick<TenantRequest, "fileName" | "filePath" | "mimeType"> = {};
+
+      if (file) {
+        const filePath = await uploadTenantRequestFile(route.ownerId, requestId, file);
+        filePatch = { fileName: file.name, filePath, mimeType: file.type };
+      }
+
+      await submitTenantRequest({
+        ownerId: route.ownerId,
+        propertyId: route.propertyId,
+        propertyName: route.propertyName || "",
+        unit: String(form.get("unit") || ""),
+        tenantName: String(form.get("tenantName") || ""),
+        tenantEmail: String(form.get("tenantEmail") || ""),
+        tenantPhone: String(form.get("tenantPhone") || ""),
+        title: String(form.get("title") || ""),
+        description: String(form.get("description") || ""),
+        urgency: form.get("urgency") as TenantRequest["urgency"],
+        permissionToEnter: form.get("permissionToEnter") === "yes",
+        preferredTimes: String(form.get("preferredTimes") || ""),
+        ...filePatch,
+      });
+
+      setSubmitted(true);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Request could not be sent.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-background px-4 py-6">
+      <main className="mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-xl flex-col justify-center">
+        <div className="mb-6 flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-[var(--hh-primary)] text-white"><Home className="h-4 w-4" /></div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Home Harbor</p>
+            <p className="text-xs text-muted-foreground">Maintenance request</p>
+          </div>
+        </div>
+
+        {submitted ? (
+          <section className="rounded-[1.75rem] border border-border bg-card/90 p-6 shadow-[var(--hh-shadow-sm)]">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-[1.35rem] bg-[var(--hh-success-bg)] text-[var(--hh-success)]">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <p className="text-2xl font-semibold leading-tight text-foreground">Request sent.</p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">Thanks. Your maintenance request was sent to the property owner. They will review it and follow up using the contact details you provided.</p>
+          </section>
+        ) : (
+          <form onSubmit={submit} className="rounded-[1.75rem] border border-border bg-card/90 p-5 shadow-[var(--hh-shadow-sm)] sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{route.propertyName || "Property request link"}</p>
+            <h1 className="mt-2 text-2xl font-semibold leading-tight text-foreground">Tell the owner what needs attention.</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">No account needed. Share the issue, add a photo if helpful, and the owner will see it in Home Harbor.</p>
+
+            <div className="mt-6 space-y-3">
+              <Field label="Issue title"><input name="title" required className={inputClass} placeholder="Kitchen sink is leaking" /></Field>
+              <Field label="What happened?"><textarea name="description" required rows={4} className={inputClass} placeholder="Describe the issue, when it started, and anything the owner should know." /></Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Unit"><input name="unit" required className={inputClass} placeholder="Unit 2A" /></Field>
+                <Field label="Urgency"><select name="urgency" defaultValue="medium" className={inputClass}><option value="low">Normal</option><option value="medium">Soon</option><option value="high">Urgent</option></select></Field>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Your name"><input name="tenantName" required className={inputClass} placeholder="Your name" /></Field>
+                <Field label="Phone"><input name="tenantPhone" required className={inputClass} placeholder="Best phone number" /></Field>
+              </div>
+              <Field label="Email"><input name="tenantEmail" type="email" className={inputClass} placeholder="Optional email" /></Field>
+              <Field label="Permission to enter"><select name="permissionToEnter" defaultValue="no" className={inputClass}><option value="no">Please contact me first</option><option value="yes">Yes, owner/vendor may enter</option></select></Field>
+              <Field label="Preferred times"><input name="preferredTimes" className={inputClass} placeholder="Weekdays after 4pm, Saturday morning, etc." /></Field>
+              <Field label="Photo or file"><input name="file" type="file" className={inputClass} /></Field>
+              {message && <p className="rounded-2xl border border-[var(--hh-urgent-border)] bg-[var(--hh-urgent-bg)] px-3 py-2 text-sm font-semibold text-[var(--hh-urgent)]">{message}</p>}
+            </div>
+
+            <Button type="submit" disabled={saving} className="mt-5 w-full">
+              {saving ? "Sending..." : "Send request"}
+            </Button>
+          </form>
+        )}
+      </main>
+    </div>
+  );
+}
+
 function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, onSave }: { kind: ModalKind; data: AppData; selectedProperty: string | null; editRecord: EditableRecord; saving: boolean; onClose: () => void; onSave: (kind: Exclude<ModalKind, null>, payload: Record<string, FormDataEntryValue>, editRecord: EditableRecord) => Promise<void> }) {
   if (!kind) return null;
   const editing = editRecord?.kind === kind;
@@ -940,6 +1111,68 @@ function AppModal({ kind, data, selectedProperty, editRecord, saving, onClose, o
           <Button type="submit" disabled={saving} className="flex-1">{saving ? "Saving..." : editing ? "Save changes" : "Save"}</Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function TenantRequestDrawer({ request, onClose, onStatusChange }: { request: TenantRequest | null; onClose: () => void; onStatusChange: (request: TenantRequest, status: TenantRequest["status"]) => void }) {
+  if (!request) return null;
+  const urgent = request.urgency === "high";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-0 sm:items-center sm:justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Tenant request">
+      <section className="max-h-[92dvh] w-full overflow-y-auto rounded-t-[1.75rem] border border-border bg-card/95 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-[var(--hh-shadow-md)] backdrop-blur-2xl sm:max-w-lg sm:rounded-[1.35rem] sm:pb-4">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Tenant request</p>
+            <h2 className="mt-1 text-xl font-semibold leading-tight text-foreground">{request.title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{request.propertyName || "Property"}{request.unit ? ` - ${request.unit}` : ""}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 transition-colors hover:bg-muted active:scale-95" aria-label="Close"><X className="h-4 w-4" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div className={`rounded-2xl border p-3 ${urgent ? "border-[var(--hh-urgent-border)] bg-[var(--hh-urgent-bg)]" : "border-[var(--hh-warning-border)] bg-[var(--hh-warning-bg)]"}`}>
+            <p className={`text-xs font-semibold uppercase tracking-widest ${urgent ? "text-[var(--hh-urgent)]" : "text-[var(--hh-warning)]"}`}>{urgent ? "Urgent" : request.urgency === "medium" ? "Soon" : "Normal"}</p>
+            <p className="mt-1 text-sm leading-6 text-foreground">{tenantRequestNextAction(request)}</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Description</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">{request.description}</p>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              ["Tenant", request.tenantName],
+              ["Phone", request.tenantPhone],
+              ["Email", request.tenantEmail || "Not provided"],
+              ["Entry", request.permissionToEnter ? "Permission granted" : "Contact tenant first"],
+              ["Preferred times", request.preferredTimes || "Not provided"],
+              ["Status", request.status],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-2xl bg-[var(--input-background)] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {request.fileName && (
+            <div className="rounded-2xl border border-border bg-background/60 p-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Attached file</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">{request.fileName}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">Stored in the tenant request files bucket. Signed viewing can be added next.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          {request.status !== "in-progress" && <Button variant="secondary" onClick={() => onStatusChange(request, "in-progress")}>Mark in progress</Button>}
+          {request.status !== "resolved" && <Button onClick={() => onStatusChange(request, "resolved")}>Mark resolved</Button>}
+          {request.status === "resolved" && <Button variant="secondary" onClick={() => onStatusChange(request, "open")}>Reopen request</Button>}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1268,6 +1501,8 @@ export default function App() {
   const [analyticsEnabled, setAnalyticsEnabled] = useState(() => localStorage.getItem("home-harbor-analytics-enabled") !== "false");
   const [lastNotificationKey, setLastNotificationKey] = useState("");
   const [notice, setNotice] = useState<{ message: string; tone: "success" | "error" } | null>(null);
+  const [tenantRequests, setTenantRequests] = useState<TenantRequest[]>([]);
+  const [selectedTenantRequest, setSelectedTenantRequest] = useState<TenantRequest | null>(null);
 
   const serializedData = JSON.stringify(data);
   const serializedProfile = JSON.stringify(profile);
@@ -1351,6 +1586,21 @@ export default function App() {
   }, [session?.user.id, cloudReady, serializedData, serializedProfile, onboarded]);
 
   useEffect(() => {
+    if (!session?.user.id || !cloudReady) return;
+
+    let cancelled = false;
+    loadTenantRequests(session.user.id)
+      .then((requests) => {
+        if (!cancelled) setTenantRequests(requests);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user.id, cloudReady, serializedData]);
+
+  useEffect(() => {
     if (!notificationsEnabled || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     const urgent = reminders.filter((reminder) => reminder.severity === "high");
     if (urgent.length === 0) return;
@@ -1388,6 +1638,11 @@ export default function App() {
     setSelectedProperty(id);
     setTab("properties");
     track("property_opened", { source: "dashboard" });
+  }
+
+  function openTenantRequest(request: TenantRequest) {
+    setSelectedTenantRequest(request);
+    track("tenant_request_opened", { status: request.status, urgency: request.urgency });
   }
 
   function openAdd(kind: Exclude<ModalKind, null>) {
@@ -1540,6 +1795,30 @@ export default function App() {
     showToast(status === "resolved" ? "Maintenance marked resolved." : "Maintenance reopened.");
   }
 
+  async function changeTenantRequestStatus(request: TenantRequest, status: TenantRequest["status"]) {
+    if (!session?.user.id) return;
+    try {
+      await updateTenantRequestStatus(session.user.id, request.id, status);
+      const nextRequest = { ...request, status };
+      setTenantRequests((current) => current.map((item) => item.id === request.id ? nextRequest : item));
+      setSelectedTenantRequest(nextRequest);
+      setData((current) => withActivity(
+        current,
+        {
+          title: status === "resolved" ? "Tenant request resolved" : "Tenant request updated",
+          detail: `${request.title} - ${request.propertyName || propertyName(current, request.propertyId)}`,
+          outcome: status === "resolved" ? "No longer shown as owner action" : tenantRequestNextAction(nextRequest),
+          tone: status === "resolved" ? "success" : "warning",
+          tab: "dashboard",
+          propertyId: request.propertyId,
+        },
+      ));
+      showToast(status === "resolved" ? "Tenant request resolved." : "Tenant request updated.");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not update tenant request.", "error");
+    }
+  }
+
   function toggleTask(id: string) {
     setData((current) => {
       const task = current.tasks.find((item) => item.id === id);
@@ -1652,6 +1931,18 @@ export default function App() {
     setCloudReady(false);
   }
 
+  async function copyRequestLink(property: Property) {
+    if (!session?.user.id) return;
+    const link = tenantRequestLink(session.user.id, property);
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast("Tenant request link copied.");
+      track("tenant_request_link_copied", { propertyId: property.id });
+    } catch {
+      showToast(link, "success");
+    }
+  }
+
   function exportData() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1666,7 +1957,7 @@ export default function App() {
   }
 
   function renderContent() {
-    if (tab === "dashboard") return <Dashboard data={data} profile={profile} reminders={reminders} notificationsEnabled={notificationsEnabled} onNav={navigate} onToggleNotifications={toggleNotifications} onAddTask={() => openAdd("task")} onAddMaintenance={() => openAdd("maintenance")} onAddDocument={() => openAdd("document")} onOpenProperty={openPropertyFromDashboard} />;
+    if (tab === "dashboard") return <Dashboard data={data} profile={profile} reminders={reminders} tenantRequests={tenantRequests} notificationsEnabled={notificationsEnabled} onNav={navigate} onToggleNotifications={toggleNotifications} onAddTask={() => openAdd("task")} onAddMaintenance={() => openAdd("maintenance")} onAddDocument={() => openAdd("document")} onOpenProperty={openPropertyFromDashboard} onOpenTenantRequest={openTenantRequest} />;
     if (tab === "properties") {
       return selectedProperty ? (
         <PropertyDetail
@@ -1688,12 +1979,18 @@ export default function App() {
           updateMaintenance={updateMaintenance}
         />
       ) : (
-        <PropertiesList data={data} onSelect={setSelectedProperty} onAdd={() => openAdd("property")} onEdit={(property) => openEdit({ kind: "property", item: property })} onDelete={(id) => deleteRecord("property", id)} />
+        <PropertiesList data={data} onSelect={setSelectedProperty} onAdd={() => openAdd("property")} onEdit={(property) => openEdit({ kind: "property", item: property })} onDelete={(id) => deleteRecord("property", id)} onCopyRequestLink={copyRequestLink} />
       );
     }
     if (tab === "tasks") return <Tasks data={data} onAdd={() => openAdd("task")} onEdit={(task) => openEdit({ kind: "task", item: task })} onDelete={(id) => deleteRecord("task", id)} toggleTask={toggleTask} />;
     if (tab === "documents") return <Documents data={data} onAdd={() => openAdd("document")} onOpen={openDocument} onEdit={(doc) => openEdit({ kind: "document", item: doc })} onDelete={(id) => deleteRecord("document", id)} />;
     return <SettingsScreen data={data} profile={profile} userId={session.user.id} activeTab={tab} notificationsEnabled={notificationsEnabled} analyticsEnabled={analyticsEnabled} setAnalyticsEnabled={setAnalyticsEnabled} resetData={resetData} exportData={exportData} replayOnboarding={replayOnboarding} onToggleNotifications={toggleNotifications} onSignOut={signOut} onTrack={track} />;
+  }
+
+  const tenantRequestRoute = getTenantRequestRoute();
+
+  if (tenantRequestRoute) {
+    return <TenantRequestScreen route={tenantRequestRoute} />;
   }
 
   if (!supabase) {
@@ -1741,7 +2038,12 @@ export default function App() {
       profile={profile}
       cloudStatus={cloudStatus}
       beforeContent={<InstallHint />}
-      overlay={<AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={savingRecord} onClose={closeModal} onSave={save} />}
+      overlay={
+        <>
+          <AppModal kind={modal} data={data} selectedProperty={selectedProperty} editRecord={editRecord} saving={savingRecord} onClose={closeModal} onSave={save} />
+          <TenantRequestDrawer request={selectedTenantRequest} onClose={() => setSelectedTenantRequest(null)} onStatusChange={changeTenantRequestStatus} />
+        </>
+      }
       notice={notice}
     >
       {renderContent()}

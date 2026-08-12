@@ -45,6 +45,8 @@ The SQL also creates a private `documents` storage bucket. Uploaded document fil
 
 The SQL also creates first-party beta tables for `feedback` and `analytics_events`. Feedback reports and usage events are stored in your own Supabase project with row-level security.
 
+The SQL also creates `tenant_requests` and a private `tenant-request-files` storage bucket. Tenants can submit maintenance requests from public property links without an account, while only the signed-in owner can view and update requests for their own portfolio.
+
 ## Current Cloud Model
 
 The beta foundation uses a single JSON portfolio record per user:
@@ -70,6 +72,16 @@ The app includes an in-app reminder center on the dashboard. It surfaces:
 - expired or soon-expiring leases
 
 Users can enable browser notifications from the dashboard reminder panel or Settings. Browser notifications work while the app is open; production push notifications for background mobile delivery would require a later native/PWA push service.
+
+## Tenant Request Links
+
+Owners can copy a public tenant request link from each property card. The link follows this shape:
+
+```text
+/request/:ownerId/:propertyId/:propertyName
+```
+
+Tenants do not need to log in. They can submit a maintenance issue, urgency, unit, contact details, permission-to-enter, preferred times, and an optional photo/file. Submitted requests appear in the owner's Today view as Needs Owner Action, where the owner can mark them in progress or resolved.
 
 ## Privacy, Legal, Feedback, And Analytics
 

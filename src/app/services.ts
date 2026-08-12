@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import type { AnalyticsSummary, AppData, AppProfile, FeedbackItem } from "./types";
+import type { AnalyticsSummary, AppData, AppProfile, FeedbackItem, TenantRequest } from "./types";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -48,6 +48,20 @@ export async function uploadDocumentFile(userId: string, file: File, documentId:
   return path;
 }
 
+export async function uploadTenantRequestFile(ownerId: string, requestId: string, file: File) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const path = `${ownerId}/${requestId}/${Date.now()}-${safeName}`;
+  const { error } = await supabase.storage.from("tenant-request-files").upload(path, file, {
+    cacheControl: "3600",
+    upsert: true,
+  });
+
+  if (error) throw error;
+  return path;
+}
+
 export async function openDocumentFile(filePath: string) {
   if (!supabase) return;
 
@@ -68,6 +82,77 @@ export async function submitFeedback(userId: string, feedback: FeedbackItem) {
     page: feedback.page || null,
     user_agent: navigator.userAgent,
   });
+
+  if (error) throw error;
+}
+
+export async function submitTenantRequest(request: Omit<TenantRequest, "id" | "createdAt" | "status"> & { status?: TenantRequest["status"] }) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { error } = await supabase.from("tenant_requests").insert({
+    owner_id: request.ownerId,
+    property_id: request.propertyId,
+    property_name: request.propertyName || null,
+    unit: request.unit,
+    tenant_name: request.tenantName,
+    tenant_email: request.tenantEmail,
+    tenant_phone: request.tenantPhone,
+    title: request.title,
+    description: request.description,
+    urgency: request.urgency,
+    permission_to_enter: request.permissionToEnter,
+    preferred_times: request.preferredTimes,
+    status: request.status || "open",
+    file_name: request.fileName || null,
+    file_path: request.filePath || null,
+    mime_type: request.mimeType || null,
+  });
+
+  if (error) throw error;
+}
+
+export async function loadTenantRequests(ownerId: string): Promise<TenantRequest[]> {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { data, error } = await supabase
+    .from("tenant_requests")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+
+  return (data || []).map((item) => ({
+    id: item.id,
+    ownerId: item.owner_id,
+    propertyId: item.property_id,
+    propertyName: item.property_name,
+    unit: item.unit || "",
+    tenantName: item.tenant_name || "",
+    tenantEmail: item.tenant_email || "",
+    tenantPhone: item.tenant_phone || "",
+    title: item.title,
+    description: item.description,
+    urgency: item.urgency,
+    permissionToEnter: Boolean(item.permission_to_enter),
+    preferredTimes: item.preferred_times || "",
+    status: item.status,
+    fileName: item.file_name,
+    filePath: item.file_path,
+    mimeType: item.mime_type,
+    createdAt: item.created_at,
+  })) as TenantRequest[];
+}
+
+export async function updateTenantRequestStatus(ownerId: string, requestId: string, status: TenantRequest["status"]) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { error } = await supabase
+    .from("tenant_requests")
+    .update({ status })
+    .eq("owner_id", ownerId)
+    .eq("id", requestId);
 
   if (error) throw error;
 }

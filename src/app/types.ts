@@ -45,6 +45,27 @@ export interface MaintenanceItem {
   vendor: string;
 }
 
+export interface TenantRequest {
+  id: string;
+  ownerId: string;
+  propertyId: string;
+  propertyName?: string | null;
+  unit: string;
+  tenantName: string;
+  tenantEmail: string;
+  tenantPhone: string;
+  title: string;
+  description: string;
+  urgency: "low" | "medium" | "high";
+  permissionToEnter: boolean;
+  preferredTimes: string;
+  status: "open" | "in-progress" | "resolved";
+  fileName?: string | null;
+  filePath?: string | null;
+  mimeType?: string | null;
+  createdAt: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;

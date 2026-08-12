@@ -133,3 +133,68 @@ using (auth.uid() = user_id);
 
 create index if not exists analytics_events_user_created_idx on public.analytics_events (user_id, created_at desc);
 create index if not exists feedback_user_created_idx on public.feedback (user_id, created_at desc);
+
+create table if not exists public.tenant_requests (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  property_id text not null,
+  property_name text,
+  unit text not null default '',
+  tenant_name text not null,
+  tenant_email text,
+  tenant_phone text,
+  title text not null,
+  description text not null,
+  urgency text not null default 'medium' check (urgency in ('low', 'medium', 'high')),
+  permission_to_enter boolean not null default false,
+  preferred_times text not null default '',
+  status text not null default 'open' check (status in ('open', 'in-progress', 'resolved')),
+  file_name text,
+  file_path text,
+  mime_type text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.tenant_requests enable row level security;
+
+drop trigger if exists set_tenant_requests_updated_at on public.tenant_requests;
+create trigger set_tenant_requests_updated_at
+before update on public.tenant_requests
+for each row execute function public.set_updated_at();
+
+drop policy if exists "Anyone can submit tenant requests" on public.tenant_requests;
+create policy "Anyone can submit tenant requests"
+on public.tenant_requests for insert
+with check (true);
+
+drop policy if exists "Owners can view their tenant requests" on public.tenant_requests;
+create policy "Owners can view their tenant requests"
+on public.tenant_requests for select
+using (auth.uid() = owner_id);
+
+drop policy if exists "Owners can update their tenant requests" on public.tenant_requests;
+create policy "Owners can update their tenant requests"
+on public.tenant_requests for update
+using (auth.uid() = owner_id)
+with check (auth.uid() = owner_id);
+
+insert into storage.buckets (id, name, public)
+values ('tenant-request-files', 'tenant-request-files', false)
+on conflict (id) do nothing;
+
+drop policy if exists "Anyone can upload tenant request files" on storage.objects;
+create policy "Anyone can upload tenant request files"
+on storage.objects for insert
+with check (bucket_id = 'tenant-request-files');
+
+drop policy if exists "Owners can view tenant request files" on storage.objects;
+create policy "Owners can view tenant request files"
+on storage.objects for select
+using (
+  bucket_id = 'tenant-request-files'
+  and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+create index if not exists tenant_requests_owner_created_idx on public.tenant_requests (owner_id, created_at desc);
+create index if not exists tenant_requests_owner_status_idx on public.tenant_requests (owner_id, status);
