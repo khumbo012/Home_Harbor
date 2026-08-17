@@ -17,22 +17,30 @@ function initials(name: string) {
 }
 
 function MobileNav({ active, onChange, badge }: { active: Tab; onChange: (tab: Tab) => void; badge: number }) {
+  const activeIndex = Math.max(NAV_ITEMS.findIndex((item) => item.id === active), 0);
+
   return (
-    <nav className="border-t border-border bg-[var(--hh-glass)] pb-[calc(env(safe-area-inset-bottom)+0.25rem)] backdrop-blur-2xl lg:hidden">
-      <div className="flex">
+    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom)+0.65rem)] lg:hidden" aria-label="Primary">
+      <div className="pointer-events-auto relative mx-auto max-w-md overflow-hidden rounded-[1.65rem] border border-white/70 bg-white/78 p-1.5 shadow-[0_18px_44px_rgba(15,23,42,0.16)] backdrop-blur-2xl">
+        <span
+          className="absolute bottom-1.5 left-1.5 top-1.5 w-[calc((100%_-_0.75rem)/5)] rounded-[1.25rem] bg-[var(--hh-primary)] shadow-[0_10px_26px_rgba(10,132,255,0.25)] transition-transform duration-200 ease-out"
+          style={{ transform: `translateX(${activeIndex * 100}%)` }}
+          aria-hidden="true"
+        />
+        <div className="relative grid grid-cols-5">
         {NAV_ITEMS.map(({ id, label, Icon }) => {
           const activeItem = active === id;
           return (
-            <button key={id} onClick={() => onChange(id)} className={`relative flex min-h-[62px] flex-1 flex-col items-center gap-1 pb-3 pt-2 transition-colors ${activeItem ? "text-[var(--hh-primary)]" : "text-muted-foreground"}`}>
-              {activeItem && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--hh-primary)]" />}
+            <button key={id} onClick={() => onChange(id)} className={`relative flex min-h-[54px] flex-col items-center justify-center gap-0.5 rounded-[1.2rem] px-1 transition-colors duration-200 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hh-primary-border)] ${activeItem ? "text-white" : "text-muted-foreground hover:text-foreground"}`} aria-current={activeItem ? "page" : undefined}>
               <span className="relative">
-                <Icon className="h-[21px] w-[21px]" />
+                <Icon className="h-5 w-5" />
                 {id === "dashboard" && badge > 0 && <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--hh-urgent)] px-1 text-[9px] font-semibold text-white">{badge > 9 ? "9+" : badge}</span>}
               </span>
-              <span className="text-[10px] font-semibold leading-none">{label}</span>
+              <span className="max-w-full truncate text-[10px] font-semibold leading-none">{label}</span>
             </button>
           );
         })}
+        </div>
       </div>
     </nav>
   );
